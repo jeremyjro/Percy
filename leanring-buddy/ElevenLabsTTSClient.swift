@@ -1739,17 +1739,13 @@ final class OpenAIRealtimeSpeechClient: OpenClickyTTSClient {
         turn.startReceiving()
     }
 
-    func finishBidirectionalVoiceTurn(
-        routeCommittedUserTranscript: @escaping @MainActor @Sendable (String) -> Bool = { _ in false }
-    ) async throws -> BidirectionalVoiceTurnResult {
+    func finishBidirectionalVoiceTurn() async throws -> BidirectionalVoiceTurnResult {
         guard let activeBidirectionalVoiceTurn else {
             throw CancellationError()
         }
         self.activeBidirectionalVoiceTurn = nil
         do {
-            let result = try await activeBidirectionalVoiceTurn.finish(
-                routeCommittedUserTranscript: routeCommittedUserTranscript
-            )
+            let result = try await activeBidirectionalVoiceTurn.finish()
             if result.didCreateAssistantResponse {
                 stopPlaybackInternal()
             }
@@ -1991,9 +1987,6 @@ final class OpenAIRealtimeSpeechClient: OpenClickyTTSClient {
         private let onAssistantTextChunk: @MainActor @Sendable (String) -> Void
         private let onPlaybackStarted: @MainActor @Sendable () -> Void
         private var receiveTask: Task<BidirectionalVoiceTurnResult, Error>?
-        private let transcriptLock = NSLock()
-        private var latestUserTranscript = ""
-        private var hasCompletedUserTranscript = false
         private var hasInstalledInputTap = false
         private var didStartPlayback = false
 
@@ -2049,27 +2042,9 @@ final class OpenAIRealtimeSpeechClient: OpenClickyTTSClient {
             }
         }
 
-        func finish(
-            routeCommittedUserTranscript: @escaping @MainActor @Sendable (String) -> Bool
-        ) async throws -> BidirectionalVoiceTurnResult {
+        func finish() async throws -> BidirectionalVoiceTurnResult {
             stopInputCapture()
             try await sendJSON(["type": "input_audio_buffer.commit"])
-
-            let committedTranscript = await waitForCommittedUserTranscript(timeoutNanoseconds: 5_000_000_000)
-            if await MainActor.run(body: { routeCommittedUserTranscript(committedTranscript) }) {
-                receiveTask?.cancel()
-                receiveTask = nil
-                playerNode.stop()
-                outputEngine.stop()
-                webSocket.cancel(with: .normalClosure, reason: nil)
-                return BidirectionalVoiceTurnResult(
-                    userTranscript: committedTranscript,
-                    assistantTranscript: "",
-                    didCreateAssistantResponse: false,
-                    wasRoutedByClient: true
-                )
-            }
-
             try await sendJSON([
                 "type": "response.create",
                 "response": [
@@ -2176,33 +2151,8 @@ final class OpenAIRealtimeSpeechClient: OpenClickyTTSClient {
             )
         }
 
-        private func recordUserTranscript(_ transcript: String, completed: Bool) -> String {
-            let normalized = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
-            transcriptLock.lock()
-            latestUserTranscript = normalized
-            hasCompletedUserTranscript = hasCompletedUserTranscript || completed
-            transcriptLock.unlock()
-            return normalized
-        }
-
-        private func currentUserTranscriptSnapshot() -> (transcript: String, completed: Bool) {
-            transcriptLock.lock()
-            let snapshot = (latestUserTranscript, hasCompletedUserTranscript)
-            transcriptLock.unlock()
-            return snapshot
-        }
-
-        private func waitForCommittedUserTranscript(timeoutNanoseconds: UInt64) async -> String {
-            let startedAt = Date()
-            while Date().timeIntervalSince(startedAt) < Double(timeoutNanoseconds) / 1_000_000_000 {
-                if Task.isCancelled { break }
-                let snapshot = currentUserTranscriptSnapshot()
-                if snapshot.completed {
-                    return snapshot.transcript
-                }
-                try? await Task.sleep(nanoseconds: 50_000_000)
-            }
-            return currentUserTranscriptSnapshot().transcript
+        private func recordUserTranscript(_ transcript: String, completed _: Bool) -> String {
+            transcript.trimmingCharacters(in: .whitespacesAndNewlines)
         }
 
         private func sendJSON(_ payload: [String: Any]) async throws {

@@ -2367,21 +2367,14 @@ final class CompanionManager: ObservableObject {
         realtimeBidirectionalVoiceTask = Task { [weak self] in
             do {
                 guard let self else { return }
-                let result = try await self.openAIRealtimeSpeechClient.finishBidirectionalVoiceTurn(
-                    routeCommittedUserTranscript: { [weak self] transcript in
-                        self?.shouldRouteRealtimeVoiceTranscriptToApp(transcript) ?? false
-                    }
-                )
-                let routedByApp = result.wasRoutedByClient
+                let result = try await self.openAIRealtimeSpeechClient.finishBidirectionalVoiceTurn()
+                let routedByApp = false
                 let assistantText = result.assistantTranscript.isEmpty
                     ? (result.didCreateAssistantResponse ? "Done." : "Routed to OpenClicky.")
                     : result.assistantTranscript
                 let userTranscript = result.userTranscript.isEmpty ? "Realtime voice input" : result.userTranscript
 
                 await MainActor.run {
-                    if routedByApp {
-                        _ = self.handleRealtimeVoiceTranscriptRouteIfNeeded(userTranscript, source: source)
-                    }
                     self.lastTranscript = userTranscript
                     if !routedByApp {
                         self.conversationHistory.append((
@@ -2516,164 +2509,6 @@ final class CompanionManager: ObservableObject {
         }
 
         sendTranscriptToClaudeWithScreenshot(transcript: finalTranscript)
-    }
-
-    private func shouldRouteRealtimeVoiceTranscriptToApp(_ transcript: String) -> Bool {
-        let trimmedTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedTranscript.isEmpty else { return false }
-
-        if Self.isCancelAllAgentTasksRequest(trimmedTranscript)
-            || Self.isCancelCurrentAgentTaskRequest(trimmedTranscript)
-            || Self.isAgentStatusQuestion(trimmedTranscript)
-            || Self.agentSelectionRequest(from: trimmedTranscript) != nil {
-            return true
-        }
-
-        if let offeredAt = pendingAgentOfferAt,
-           pendingAgentOfferInstruction != nil,
-           Date().timeIntervalSince(offeredAt) <= Self.pendingAgentOfferTTL,
-           Self.isAffirmativeConfirmation(trimmedTranscript) {
-            return true
-        }
-
-        if pendingAgentVoiceFollowUpSessionID != nil {
-            return true
-        }
-
-        if Self.explicitNewTaskInstruction(from: trimmedTranscript) != nil
-            || Self.isIncompleteExplicitNewTaskRequest(from: trimmedTranscript)
-            || Self.agentTaskCreationInstruction(from: trimmedTranscript) != nil
-            || Self.isIncompleteAgentTaskCreationRequest(from: trimmedTranscript)
-            || Self.clickyAgentInstruction(from: trimmedTranscript) != nil
-            || Self.permissiveAgentInstruction(from: trimmedTranscript) != nil
-            || Self.implicitAgentTaskInstruction(from: trimmedTranscript) != nil {
-            return true
-        }
-
-        if let partialTranscript = deferredLiveAgentRoutePartial,
-           let partialAt = deferredLiveAgentRoutePartialAt,
-           Date().timeIntervalSince(partialAt) <= Self.deferredLiveAgentRoutePartialTTL,
-           Self.deferredLiveAgentRouteInstruction(
-               partialTranscript: partialTranscript,
-               finalTranscript: trimmedTranscript
-           ) != nil {
-            return true
-        }
-
-        if folderOpenRequest(from: trimmedTranscript) != nil
-            || Self.localAppOpenRequest(from: trimmedTranscript) != nil
-            || Self.webOpenRequest(from: trimmedTranscript) != nil
-            || Self.reminderAddRequest(from: trimmedTranscript) != nil
-            || Self.reminderCountRequest(from: trimmedTranscript) != nil
-            || Self.messagesSearchRequest(from: trimmedTranscript) != nil
-            || Self.nativeTypeRequest(from: trimmedTranscript) != nil
-            || Self.nativeKeyPressRequest(from: trimmedTranscript) != nil {
-            return true
-        }
-
-        if Self.isLikelyAgentFollowUpPhrasing(trimmedTranscript),
-           latestSteerableAgentSession() != nil {
-            return true
-        }
-
-        // GPT Realtime audio turns do not currently carry image input into the
-        // Realtime model. If the user asks about the screen, route the committed
-        // transcript back through OpenClicky's normal visual voice path so it
-        // can consume the screenshot that was prewarmed on key-down.
-        if Self.shouldAttachScreenContext(to: trimmedTranscript) {
-            return true
-        }
-
-        return false
-    }
-
-    @discardableResult
-    private func handleRealtimeVoiceTranscriptRouteIfNeeded(_ transcript: String, source: String) -> Bool {
-        let trimmedTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedTranscript.isEmpty else {
-            OpenClickyMessageLogStore.shared.append(
-                lane: "voice",
-                direction: "internal",
-                event: "voice.realtime_bidirectional.route_skipped",
-                fields: [
-                    "source": source,
-                    "reason": "missing_user_transcript"
-                ]
-            )
-            return false
-        }
-
-        let requestTiming = beginRequestTiming(source: "voice_realtime_transcript", text: trimmedTranscript)
-        activeRequestTiming = requestTiming
-        defer {
-            activeRequestTiming = nil
-            clearDeferredLiveAgentRoutePartial()
-        }
-
-        lastTranscript = trimmedTranscript
-        lastVoiceInteractionCompletedAt = Date()
-        speculativeStabilityDwellTask?.cancel()
-        speculativeStabilityDwellTask = nil
-        lastObservedPartial = nil
-        lastObservedPartialAt = nil
-
-        OpenClickyMessageLogStore.shared.append(
-            lane: "voice",
-            direction: "incoming",
-            event: "voice.transcript",
-            fields: [
-                "text": trimmedTranscript,
-                "source": source,
-                "inputPath": "realtime_input_audio_buffer",
-                "requestID": requestTiming.requestID
-            ]
-        )
-        ClickyAnalytics.trackUserMessageSent(transcript: trimmedTranscript)
-
-        let routed = routeFinalVoiceTranscriptActionIfNeeded(
-            trimmedTranscript,
-            source: "realtime_voice",
-            selectionSource: "voice_realtime_transcript",
-            directComputerUseSource: "realtime_transcript",
-            includeQuickLocalResponses: false
-        )
-        if routed {
-            OpenClickyMessageLogStore.shared.append(
-                lane: "voice",
-                direction: "internal",
-                event: "voice.realtime_bidirectional.app_route_handled",
-                fields: [
-                    "source": source,
-                    "requestID": requestTiming.requestID
-                ]
-            )
-        } else if Self.shouldAttachScreenContext(to: trimmedTranscript) {
-            OpenClickyMessageLogStore.shared.append(
-                lane: "voice",
-                direction: "internal",
-                event: "voice.realtime_bidirectional.visual_route_handled",
-                fields: [
-                    "source": source,
-                    "requestID": requestTiming.requestID,
-                    "screenContextNeeded": true,
-                    "executor": "voice.response",
-                    "executionMethod": "sendTranscriptToClaudeWithScreenshot"
-                ]
-            )
-            sendTranscriptToClaudeWithScreenshot(transcript: trimmedTranscript)
-            return true
-        } else {
-            markRequestCompleted(
-                route: "voice.realtime_response",
-                timing: requestTiming,
-                extra: [
-                    "executor": "openai_realtime",
-                    "executionMethod": "OpenAIRealtimeSpeechClient.finishBidirectionalVoiceTurn",
-                    "source": source
-                ]
-            )
-        }
-        return routed
     }
 
     private func routeFinalVoiceTranscriptActionIfNeeded(
