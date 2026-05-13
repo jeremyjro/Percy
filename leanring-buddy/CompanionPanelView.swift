@@ -117,47 +117,10 @@ struct CompanionPanelView: View {
                     .padding(.horizontal, 14)
             }
 
-            if companionManager.hasCompletedOnboarding && companionManager.allPermissionsGranted && companionManager.isAdvancedModeEnabled {
-                Spacer()
-                    .frame(height: 12)
-
-                CodexAgentModePanelSection(
-                    session: companionManager.codexAgentSession,
-                    activeDockItem: companionManager.agentDockItems.first(where: { $0.sessionID == companionManager.codexAgentSession.id }),
-                    knowledgeIndex: companionManager.bundledKnowledgeIndex,
-                    responseCard: companionManager.latestResponseCard,
-                    transcriptionProviderDisplayName: companionManager.buddyDictationManager.transcriptionProviderDisplayName,
-                    transcriptionProviderID: companionManager.buddyDictationManager.transcriptionProviderID,
-                    setVoiceTranscriptionProvider: { companionManager.setVoiceTranscriptionProvider($0) },
-                    isClickyCursorEnabled: companionManager.isClickyCursorEnabled,
-                    setClickyCursorEnabled: { companionManager.setClickyCursorEnabled($0) },
-                    isTutorModeEnabled: companionManager.isTutorModeEnabled,
-                    setTutorModeEnabled: { companionManager.setTutorModeEnabled($0) },
-                    isAdvancedModeEnabled: companionManager.isAdvancedModeEnabled,
-                    setAdvancedModeEnabled: { companionManager.setAdvancedModeEnabled($0) },
-                    selectedCompanionModelID: companionManager.selectedModel,
-                    setSelectedCompanionModel: { companionManager.setSelectedModel($0) },
-                    selectedComputerUseModelID: companionManager.selectedComputerUseModel,
-                    setSelectedComputerUseModel: { companionManager.setSelectedComputerUseModel($0) },
-                    submitAgentPrompt: { companionManager.submitAgentPromptFromUI($0) },
-                    setAnthropicAPIKey: { companionManager.setAnthropicAPIKey($0) },
-                    setElevenLabsAPIKey: { companionManager.setElevenLabsAPIKey($0) },
-                    setElevenLabsVoiceID: { companionManager.setElevenLabsVoiceID($0) },
-                    setAssemblyAIAPIKey: { companionManager.setAssemblyAIAPIKey($0) },
-                    setDeepgramAPIKey: { companionManager.setDeepgramAPIKey($0) },
-                    setCodexAgentAPIKey: { companionManager.setCodexAgentAPIKey($0) },
-                    replayOnboarding: {},
-                    quitClicky: onQuit,
-                    openHUD: onOpenHUD,
-                    openMemory: onOpenMemory,
-                    dismissResponseCard: { companionManager.dismissLatestResponseCard() },
-                    runSuggestedNextAction: { companionManager.runSuggestedNextAction($0) },
-                    prepareVoiceFollowUp: { companionManager.prepareForVoiceFollowUp() },
-                    openFeedback: onOpenFeedback,
-                    showSettings: onShowSettings
-                )
-                .padding(.horizontal, 14)
-            }
+            // Advanced-mode "Ask Agent" panel removed — chat is now reached via
+            // the floating chat HUD (CodexHUDWindowManager / ChatWorkspaceView)
+            // and the Control-twice text-mode shortcut. The CodexAgentModePanelSection
+            // type is intentionally retained for the settings sheet wiring.
 
             if !companionManager.allPermissionsGranted && !isPermissionOnboardingActive {
                 Spacer()

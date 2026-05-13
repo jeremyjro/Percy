@@ -96,6 +96,8 @@ private enum OpenClickySettingsSection: String, CaseIterable, Identifiable {
     case permissions
     case tutorMode
     case agentMode
+    case agents
+    case automations
     case googleWorkspace
     case memory
     case app
@@ -109,7 +111,9 @@ private enum OpenClickySettingsSection: String, CaseIterable, Identifiable {
         case .apiKeys: return "API Keys"
         case .permissions: return "Permissions"
         case .tutorMode: return "Tutor Mode"
-        case .agentMode: return "Agents"
+        case .agentMode: return "Providers"
+        case .agents: return "Agents"
+        case .automations: return "Automations"
         case .googleWorkspace: return "Google"
         case .memory: return "Memory"
         case .app: return "App"
@@ -124,6 +128,8 @@ private enum OpenClickySettingsSection: String, CaseIterable, Identifiable {
         case .permissions: return "hand.raised"
         case .tutorMode: return "graduationcap"
         case .agentMode: return "terminal"
+        case .agents: return "person.2"
+        case .automations: return "calendar.badge.clock"
         case .googleWorkspace: return "globe.americas.fill"
         case .memory: return "books.vertical"
         case .app: return "app.badge"
@@ -260,7 +266,11 @@ struct OpenClickySettingsView: View {
         case .tutorMode:
             return "Tutor behavior, pause guidance, and the future skill-powered tutoring surface."
         case .agentMode:
-            return "Background agents, pointing, computer use, Codex configuration, model, working directory, and chat access."
+            return "Provider credentials, Codex runtime configuration, model defaults, and working directory."
+        case .agents:
+            return "Specialist agents with their own soul, memory, instructions, and inherited or custom skills and tools."
+        case .automations:
+            return "Scheduled prompts and workflows. Interval (every N minutes) or 5-field cron, optionally bound to a specialist agent."
         case .googleWorkspace:
             return "Local Google Workspace connection through gogcli. No hosted Google login or key sync."
         case .memory:
@@ -285,6 +295,10 @@ struct OpenClickySettingsView: View {
             tutorModePanel
         case .agentMode:
             agentModePanel
+        case .agents:
+            agentsPanel
+        case .automations:
+            automationsPanel
         case .googleWorkspace:
             googleWorkspacePanel
         case .memory:
@@ -307,15 +321,6 @@ struct OpenClickySettingsView: View {
                     )
                 )
 
-                toggleRow(
-                    title: "Advanced mode",
-                    subtitle: "Shows Agent Mode chat controls, inline agent input, model controls, and memory tools.",
-                    systemImageName: "slider.horizontal.3",
-                    isOn: Binding(
-                        get: { companionManager.isAdvancedModeEnabled },
-                        set: { companionManager.setAdvancedModeEnabled($0) }
-                    )
-                )
             }
 
             settingsGroup("Cursor appearance") {
@@ -1058,6 +1063,14 @@ struct OpenClickySettingsView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
+    }
+
+    private var agentsPanel: some View {
+        OpenClickyAgentsSettingsSection(companion: companionManager)
+    }
+
+    private var automationsPanel: some View {
+        OpenClickyAutomationsSettingsSection(companion: companionManager)
     }
 
     private var memoryPanel: some View {

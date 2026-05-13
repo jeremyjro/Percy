@@ -881,6 +881,11 @@ final class CompanionManager: ObservableObject {
                 "computerUseBackend": selectedComputerUseBackendID
             ]
         )
+        // Bind the automation scheduler so cron / interval prompts can fire
+        // through this CompanionManager while the app is running.
+        OpenClickyAutomationStore.shared.bind(companion: self)
+        // Seed bundled built-in specialist agents on first launch.
+        OpenClickyAgentStore.shared.seedBuiltinsFromBundleIfNeeded()
     }
 
     /// Whether the blue cursor overlay is currently visible on screen.
@@ -900,7 +905,11 @@ final class CompanionManager: ObservableObject {
         UserDefaults.standard.string(forKey: AppBundleConfiguration.userComputerUseBackendDefaultsKey)
     ).rawValue
     @Published var isTutorModeEnabled: Bool = CompanionManager.initialTutorModeEnabled()
-    @Published var isAdvancedModeEnabled: Bool = UserDefaults.standard.bool(forKey: AppBundleConfiguration.userAdvancedModeDefaultsKey)
+    /// Advanced-mode concept retired — the visible "Ask Agent" panel and the
+    /// settings toggle were removed. Hard-coded true so dependent code paths
+    /// (agent dashboard, memory icon, computer-use entry points) keep working
+    /// for everyone, including users who previously had the toggle off.
+    @Published var isAdvancedModeEnabled: Bool = true
 
     /// Where the agent dock parks itself on the active screen. Persisted
     /// to UserDefaults; defaults to `.topRight`.
@@ -2230,6 +2239,17 @@ final class CompanionManager: ObservableObject {
     func popoutCurrentSession() {
         let session = codexAgentSession
         MiniChatPanelManager.shared.show(session: session, companion: self)
+    }
+
+    /// Launch a new chat session pre-configured as a specialist OpenClicky
+    /// agent. The agent's soul/instructions/memory are layered into the
+    /// session's system prompt via `prependedSystemContext`.
+    @discardableResult
+    func createAndSelectNewCodexAgentSession(asAgent agent: OpenClickyAgentDefinition) -> CodexAgentSession {
+        let session = createAndSelectNewCodexAgentSession(title: agent.metadata.displayName)
+        session.prependedSystemContext = agent.renderedSystemContext()
+        session.specialistAgentSlug = agent.slug
+        return session
     }
 
     func closeCodexAgentSession(_ sessionID: UUID) {

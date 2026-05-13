@@ -205,6 +205,12 @@ final class CodexAgentSession: ObservableObject, Identifiable {
     @Published var model: String = OpenClickyModelCatalog.codexActionsModel(
         withID: UserDefaults.standard.string(forKey: "clickyCodexModel") ?? OpenClickyModelCatalog.defaultCodexActionsModelID
     ).id
+    /// Optional specialist-agent system context (soul/instructions/memory)
+    /// prepended to the developer instructions when this session is launched
+    /// under a specialist agent. Empty for default sessions.
+    @Published var prependedSystemContext: String = ""
+    /// Slug of the specialist agent powering this session, if any.
+    @Published var specialistAgentSlug: String? = nil
     @Published var workingDirectoryPath: String = UserDefaults.standard.string(forKey: "clickyCodexWorkingDirectory")
         ?? FileManager.default.homeDirectoryForCurrentUser.path
     var onOpenableFileFound: (@MainActor (URL) -> Void)?
@@ -563,8 +569,10 @@ final class CodexAgentSession: ObservableObject, Identifiable {
 
         let baseInstructions = (try? String(contentsOf: layout.modelInstructionsFile, encoding: .utf8))
             ?? "You are OpenClicky, a friendly macOS cursor companion with Codex Agent Mode."
+        let specialistContext = prependedSystemContext.trimmingCharacters(in: .whitespacesAndNewlines)
+        let specialistPrefix = specialistContext.isEmpty ? "" : "\(specialistContext)\n\n--- OpenClicky base instructions ---\n"
         let developerInstructions = """
-        You are running inside OpenClicky Agent Mode on macOS. Be direct, helpful, and careful. Prefer concrete actions over vague advice.
+        \(specialistPrefix)You are running inside OpenClicky Agent Mode on macOS. Be direct, helpful, and careful. Prefer concrete actions over vague advice.
 
         When working on the OpenClicky app repo, do not run terminal `xcodebuild`. Use Xcode for app builds and permission testing, and use `swiftc -parse <relevant Swift source files>` for lightweight Swift syntax checks.
 
