@@ -21,7 +21,7 @@ nonisolated enum ThreeDStyle: String, Codable, CaseIterable, Sendable {
     var promptPrefix: String {
         switch self {
         case .lowPolyStylized:
-            return "low poly, stylized, flat shaded, faceted clean geometry, minimal triangle count, "
+            return "faithful low-poly stylized game asset, preserve the user's described design exactly, preserve original silhouette, proportions, color palette, roof/wall/window/door/fence details, flat shaded, clean faceted geometry, simple readable shapes, "
         case .clay:
             return "stylized clay, smooth matte surfaces, "
         case .voxel:
@@ -49,7 +49,7 @@ struct ThreeDGenerationRequest: Sendable {
     init(
         prompt: String,
         style: ThreeDStyle = .lowPolyStylized,
-        negativePrompt: String? = "high poly, photorealistic, noisy detail, blurry",
+        negativePrompt: String? = "redesign, different architecture, changed color palette, changed roof shape, missing original details, high poly, photorealistic, noisy detail, blurry",
         quad: Bool = true,
         pbr: Bool = true
     ) {

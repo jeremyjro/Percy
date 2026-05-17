@@ -9,10 +9,18 @@
 //
 
 import AppKit
+import SwiftUI
 
 private final class OpenClickyNotchCapturePanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
+}
+
+enum OpenClickyNotchVoicePhase {
+    case idle
+    case listening
+    case processing
+    case responding
 }
 
 private enum OpenClickyNotchCaptureAction: String, CaseIterable {
@@ -22,15 +30,15 @@ private enum OpenClickyNotchCaptureAction: String, CaseIterable {
 
     var title: String {
         switch self {
-        case .ask: return "Ask"
-        case .aiText: return "AI Text"
+        case .ask: return "Voice"
+        case .aiText: return "Text"
         case .agent: return "Agent"
         }
     }
 
     var systemImage: String {
         switch self {
-        case .ask: return "paperplane.fill"
+        case .ask: return "waveform"
         case .aiText: return "textformat"
         case .agent: return "terminal.fill"
         }
@@ -85,18 +93,23 @@ final class OpenClickyNotchCaptureWindowManager {
         case collapsedText
         case text
         case voice
+        case main
     }
 
     private var panel: OpenClickyNotchCapturePanel?
     private var contentView: OpenClickyNotchCaptureRootView?
+    private var mainHostingView: NSHostingView<OpenClickyNotchPanelView>?
     private var activeMode: ActiveMode?
     private var persistentAccentColor = NSColor(calibratedRed: 0.20, green: 0.50, blue: 1.00, alpha: 1.0)
     private var persistentSubmitText: ((String) -> Void)?
+    private var persistentShowMainPanel: (() -> Void)?
 
     // AppKit window frames are in points, not pixels. Keep these as real
     // point sizes; do not divide by backingScaleFactor or the content clips on
     // Retina displays.
     private static let expandedPanelWidth: CGFloat = 520
+    private static let mainPanelWidth: CGFloat = 430
+    private static let mainPanelHeight: CGFloat = 620
     private static let collapsedPanelWidth: CGFloat = 188
     private static let collapsedPanelHeight: CGFloat = 18
     private static let textPanelHeight: CGFloat = 226
@@ -104,17 +117,23 @@ final class OpenClickyNotchCaptureWindowManager {
     private static let topGap: CGFloat = 0
     private static let screenEdgePadding: CGFloat = 12
 
-    func showPersistentPill(accentTheme: ClickyAccentTheme? = nil, submitText: @escaping (String) -> Void) {
+    func showPersistentPill(
+        companionManager: CompanionManager,
+        accentTheme: ClickyAccentTheme? = nil,
+        submitText: @escaping (String) -> Void
+    ) {
         activeMode = .collapsedText
-        ensurePanel()
+        ensureCaptureContentView(width: Self.collapsedPanelWidth, height: Self.collapsedPanelHeight)
         let accentColor = Self.nsAccentColor(for: accentTheme)
         persistentAccentColor = accentColor
         persistentSubmitText = submitText
+        persistentShowMainPanel = { [weak self, weak companionManager] in
+            guard let companionManager else { return }
+            self?.showMainPanel(companionManager: companionManager)
+        }
         contentView?.configureCollapsed(
             accentColor: accentColor,
-            expand: { [weak self] in
-                self?.expandTextInput(accentColor: accentColor, submitText: submitText)
-            },
+            expand: persistentShowMainPanel ?? {},
             dismiss: { [weak self] in self?.collapseToPill(accentColor: accentColor, submitText: submitText) }
         )
         showPanel(activating: false, width: Self.collapsedPanelWidth, height: Self.collapsedPanelHeight)
@@ -125,8 +144,8 @@ final class OpenClickyNotchCaptureWindowManager {
         expandTextInput(accentColor: accentColor, submitText: submitText)
     }
 
-    func updateVoiceState(_ voiceState: CompanionVoiceState, audioPowerLevel: CGFloat) {
-        switch voiceState {
+    func updateVoiceState(_ voicePhase: OpenClickyNotchVoicePhase, audioPowerLevel: CGFloat) {
+        switch voicePhase {
         case .idle:
             if activeMode == .voice {
                 if let persistentSubmitText {
@@ -136,11 +155,11 @@ final class OpenClickyNotchCaptureWindowManager {
                 }
             }
         case .listening, .processing, .responding:
-            guard activeMode != .text else { return }
+            guard activeMode != .text, activeMode != .main else { return }
             activeMode = .voice
-            ensurePanel()
+            ensureCaptureContentView(width: Self.voicePanelWidth(for: Self.preferredAnchorScreen()), height: Self.voicePanelHeight)
             contentView?.configureVoice(
-                state: voiceState,
+                phase: voicePhase,
                 audioPowerLevel: audioPowerLevel,
                 accentColor: Self.nsAccentColor(for: nil)
             )
@@ -160,9 +179,10 @@ final class OpenClickyNotchCaptureWindowManager {
 
     private func collapseToPill(accentColor: NSColor, submitText: @escaping (String) -> Void) {
         activeMode = .collapsedText
+        ensureCaptureContentView(width: Self.collapsedPanelWidth, height: Self.collapsedPanelHeight)
         contentView?.configureCollapsed(
             accentColor: accentColor,
-            expand: { [weak self] in
+            expand: persistentShowMainPanel ?? { [weak self] in
                 self?.expandTextInput(accentColor: accentColor, submitText: submitText)
             },
             dismiss: { [weak self] in self?.collapseToPill(accentColor: accentColor, submitText: submitText) }
@@ -174,6 +194,7 @@ final class OpenClickyNotchCaptureWindowManager {
         activeMode = .text
         persistentAccentColor = accentColor
         persistentSubmitText = submitText
+        ensureCaptureContentView(width: Self.expandedPanelWidth, height: Self.textPanelHeight)
         contentView?.configureText(
             accentColor: accentColor,
             submitText: submitText,
@@ -181,6 +202,25 @@ final class OpenClickyNotchCaptureWindowManager {
         )
         showPanel(activating: true, width: Self.expandedPanelWidth, height: Self.textPanelHeight)
         contentView?.focusTextField()
+    }
+
+    private func showMainPanel(companionManager: CompanionManager) {
+        activeMode = .main
+        ensurePanel()
+        let notchPanelView = OpenClickyNotchPanelView(
+            companionManager: companionManager,
+            isPanelPinned: false,
+            setPanelPinned: { _ in }
+        )
+        let hostingView = NSHostingView(rootView: notchPanelView)
+        hostingView.frame = NSRect(x: 0, y: 0, width: Self.mainPanelWidth, height: Self.mainPanelHeight)
+        hostingView.autoresizingMask = [.width, .height]
+        hostingView.wantsLayer = true
+        hostingView.layer?.backgroundColor = NSColor.clear.cgColor
+        panel?.contentView = hostingView
+        contentView = nil
+        mainHostingView = hostingView
+        showPanel(activating: true, width: Self.mainPanelWidth, height: Self.mainPanelHeight)
     }
 
     private func showPanel(activating: Bool, width: CGFloat, height: CGFloat) {
@@ -215,11 +255,17 @@ final class OpenClickyNotchCaptureWindowManager {
         capturePanel.titleVisibility = .hidden
         capturePanel.titlebarAppearsTransparent = true
 
-        let rootView = OpenClickyNotchCaptureRootView(frame: NSRect(x: 0, y: 0, width: Self.expandedPanelWidth, height: Self.textPanelHeight))
-        rootView.autoresizingMask = [.width, .height]
-        capturePanel.contentView = rootView
         panel = capturePanel
+    }
+
+    private func ensureCaptureContentView(width: CGFloat, height: CGFloat) {
+        ensurePanel()
+        if contentView != nil { return }
+        let rootView = OpenClickyNotchCaptureRootView(frame: NSRect(x: 0, y: 0, width: width, height: height))
+        rootView.autoresizingMask = [.width, .height]
+        panel?.contentView = rootView
         contentView = rootView
+        mainHostingView = nil
     }
 
     private func resizeAndReposition(width: CGFloat, height: CGFloat) {
@@ -231,6 +277,7 @@ final class OpenClickyNotchCaptureWindowManager {
             animate: false
         )
         contentView?.setCanvas(size: size)
+        mainHostingView?.frame = NSRect(origin: .zero, size: size)
         positionPanel(size: size)
     }
 
@@ -364,7 +411,7 @@ private final class OpenClickyNotchCaptureRootView: NSView, NSTextFieldDelegate 
         window?.makeFirstResponder(textField)
     }
 
-    func configureVoice(state: CompanionVoiceState, audioPowerLevel: CGFloat, accentColor: NSColor) {
+    func configureVoice(phase: OpenClickyNotchVoicePhase, audioPowerLevel: CGFloat, accentColor: NSColor) {
         mode = .voice
         self.accentColor = accentColor
         expand = nil
@@ -374,7 +421,7 @@ private final class OpenClickyNotchCaptureRootView: NSView, NSTextFieldDelegate 
         shellView.cornerRadius = 22
         shellView.borderColor = accentColor.withAlphaComponent(0.28)
         updateAccentColors()
-        updateVoiceLabels(for: state)
+        updateVoiceLabels(for: phase)
         waveformView.audioPowerLevel = audioPowerLevel
         waveformView.accentColor = accentColor
     }
@@ -392,6 +439,23 @@ private final class OpenClickyNotchCaptureRootView: NSView, NSTextFieldDelegate 
         bounds = NSRect(origin: .zero, size: size)
         needsLayout = true
         needsDisplay = true
+        updateTrackingAreas()
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach { removeTrackingArea($0) }
+        addTrackingArea(NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        ))
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        guard mode == .collapsed else { return }
+        expand?()
     }
 
     private func buildViewHierarchy() {
@@ -649,8 +713,8 @@ private final class OpenClickyNotchCaptureRootView: NSView, NSTextFieldDelegate 
         }
     }
 
-    private func updateVoiceLabels(for state: CompanionVoiceState) {
-        switch state {
+    private func updateVoiceLabels(for phase: OpenClickyNotchVoicePhase) {
+        switch phase {
         case .listening:
             voiceTitleLabel.stringValue = "Listening"
             voiceSubtitleLabel.stringValue = "Release the shortcut to send this turn."

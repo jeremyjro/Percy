@@ -149,6 +149,9 @@ enum ThreeDGenerationDispatcher {
     3D model generation is available. When the user asks you to make, create, generate, sculpt, or visualise a 3D object, prop, asset, character, or artifact, emit a single line in your reply with EXACTLY this format and nothing else on that line:
         [OPENCLICKY_3D] prompt: "<short description of the object>" style: "low_poly_stylized"
     OpenClicky will detect that line, start a 3D generation job, and show the rotating preview in a floating window. The default style is low_poly_stylized; alternatives are clay, voxel, game_asset, realistic.
+
+    For enhancement/remake/refinement requests, do not reinterpret the asset. The prompt MUST preserve the original identity: silhouette, proportions, roof shape, wall material/color, window placement, door style, fence placement, accent colors, and low-poly charm. Only ask for cleaner geometry, better lighting, cleaner textures, or slightly improved readability. Never replace a bright/stylized cottage with a different muted/realistic cottage unless the user explicitly asks for a redesign.
+
     You may include normal conversational text before or after the line. Do NOT call any tool, do NOT use Bash, do NOT try to write any files yourself — just emit the [OPENCLICKY_3D] line and OpenClicky handles the rest.
     """
 }

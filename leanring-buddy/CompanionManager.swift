@@ -188,7 +188,7 @@ final class CompanionManager: ObservableObject {
     @Published private(set) var voiceState: CompanionVoiceState = .idle {
         didSet {
             cursorOverlayState.voiceState = voiceState
-            notchCaptureWindowManager.updateVoiceState(voiceState, audioPowerLevel: currentAudioPowerLevel)
+            notchCaptureWindowManager.updateVoiceState(Self.notchVoicePhase(for: voiceState), audioPowerLevel: currentAudioPowerLevel)
         }
     }
     @Published private(set) var lastTranscript: String?
@@ -198,6 +198,15 @@ final class CompanionManager: ObservableObject {
             notchCaptureWindowManager.updateAudioPowerLevel(currentAudioPowerLevel)
         }
     }
+    private static func notchVoicePhase(for voiceState: CompanionVoiceState) -> OpenClickyNotchVoicePhase {
+        switch voiceState {
+        case .idle: return .idle
+        case .listening: return .listening
+        case .processing: return .processing
+        case .responding: return .responding
+        }
+    }
+
     @Published private(set) var hasAccessibilityPermission = false
     @Published private(set) var hasScreenRecordingPermission = false
     @Published private(set) var hasMicrophonePermission = false
@@ -1376,9 +1385,12 @@ final class CompanionManager: ObservableObject {
         print("OpenClicky start - accessibility: \(hasAccessibilityPermission), screen: \(hasScreenRecordingPermission), mic: \(hasMicrophonePermission), screenContent: \(hasScreenContentPermission), fullDiskAccess: \(hasFullDiskAccessPermission), onboarded: \(hasCompletedOnboarding)")
         startPermissionPolling()
         if runtimeMode == .menuBar {
-            notchCaptureWindowManager.showPersistentPill { [weak self] submittedText in
-                self?.submitTextModePrompt(submittedText)
-            }
+            notchCaptureWindowManager.showPersistentPill(
+                companionManager: self,
+                submitText: { [weak self] submittedText in
+                    self?.submitTextModePrompt(submittedText)
+                }
+            )
         }
         bindVoiceStateObservation()
         bindAudioPowerLevel()

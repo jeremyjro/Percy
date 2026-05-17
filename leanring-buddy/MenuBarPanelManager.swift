@@ -16,6 +16,7 @@ import SwiftUI
 
 extension Notification.Name {
     static let clickyDismissPanel = Notification.Name("clickyDismissPanel")
+    static let clickyShowPanel = Notification.Name("clickyShowPanel")
     static let clickyPanelContentSizeDidChange = Notification.Name("clickyPanelContentSizeDidChange")
 }
 
@@ -31,6 +32,7 @@ final class MenuBarPanelManager: NSObject {
     private var panel: NSPanel?
     private var clickOutsideMonitor: Any?
     private var dismissPanelObserver: NSObjectProtocol?
+    private var showPanelObserver: NSObjectProtocol?
     private var contentSizeObserver: NSObjectProtocol?
     private var contentResizeWorkItem: DispatchWorkItem?
     private var isPanelPinned = false
@@ -57,6 +59,16 @@ final class MenuBarPanelManager: NSObject {
             }
         }
 
+        showPanelObserver = NotificationCenter.default.addObserver(
+            forName: .clickyShowPanel,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.showPanel()
+            }
+        }
+
         contentSizeObserver = NotificationCenter.default.addObserver(
             forName: .clickyPanelContentSizeDidChange,
             object: nil,
@@ -73,6 +85,9 @@ final class MenuBarPanelManager: NSObject {
             NSEvent.removeMonitor(monitor)
         }
         if let observer = dismissPanelObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        if let observer = showPanelObserver {
             NotificationCenter.default.removeObserver(observer)
         }
         if let observer = contentSizeObserver {
@@ -271,7 +286,7 @@ final class MenuBarPanelManager: NSObject {
     }
 
     private func createPanel() {
-        let companionPanelView = CompanionPanelView(
+        let notchPanelView = OpenClickyNotchPanelView(
             companionManager: companionManager,
             isPanelPinned: isPanelPinned,
             setPanelPinned: { [weak self] isPinned in
@@ -284,7 +299,7 @@ final class MenuBarPanelManager: NSObject {
             alignment: .topLeading
         )
 
-        let hostingView = NSHostingView(rootView: companionPanelView)
+        let hostingView = NSHostingView(rootView: notchPanelView)
         hostingView.frame = NSRect(x: 0, y: 0, width: panelWidth, height: panelHeight)
         hostingView.autoresizingMask = [.width, .height]
         hostingView.wantsLayer = true
