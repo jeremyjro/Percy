@@ -9,6 +9,7 @@ private enum OpenClickyHUDLayout {
     static let minimumHeight: CGFloat = 452
     static let screenEdgePadding: CGFloat = 20
     static let bottomOffset: CGFloat = 24
+    static let minimumAvailableDimension: CGFloat = 1
 }
 
 @MainActor
@@ -87,10 +88,10 @@ final class CodexHUDWindowManager {
 
     private func enforceMinimumSize() {
         guard let panel else { return }
-        guard let visibleFrame = currentVisibleScreenFrame(for: panel) else { return }
+        guard let visibleFrame = visibleScreenFrameForMouseOrPanel(for: panel) else { return }
 
-        let availableWidth = max(1, visibleFrame.width - (OpenClickyHUDLayout.screenEdgePadding * 2))
-        let availableHeight = max(1, visibleFrame.height - (OpenClickyHUDLayout.screenEdgePadding * 2))
+        let availableWidth = max(OpenClickyHUDLayout.minimumAvailableDimension, visibleFrame.width - (OpenClickyHUDLayout.screenEdgePadding * 2))
+        let availableHeight = max(OpenClickyHUDLayout.minimumAvailableDimension, visibleFrame.height - (OpenClickyHUDLayout.screenEdgePadding * 2))
         let minimumWidth = min(OpenClickyHUDLayout.minimumWidth, availableWidth)
         let minimumHeight = min(OpenClickyHUDLayout.minimumHeight, availableHeight)
 
@@ -116,7 +117,7 @@ final class CodexHUDWindowManager {
 
     private func positionPanel() {
         guard let panel else { return }
-        guard let frame = currentVisibleScreenFrame(for: panel) else { return }
+        guard let frame = visibleScreenFrameForMouseOrPanel(for: panel) else { return }
 
         let edgePadding = OpenClickyHUDLayout.screenEdgePadding
         let size = panel.frame.size
@@ -131,7 +132,7 @@ final class CodexHUDWindowManager {
         panel.setFrameOrigin(NSPoint(x: x, y: y))
     }
 
-    private func currentVisibleScreenFrame(for panel: NSPanel) -> NSRect? {
+    private func visibleScreenFrameForMouseOrPanel(for panel: NSPanel) -> NSRect? {
         let screen = NSScreen.screen(containingOrNearestTo: NSEvent.mouseLocation) ?? panel.screen
         return screen?.visibleFrame
     }
