@@ -149,6 +149,27 @@ struct CodexAgentModeTests {
         #expect(shouldEscalate)
     }
 
+    @Test func implicitAgentRoutingStartsGitHubIssueTaskImmediately() throws {
+        let instruction = try #require(
+            CompanionManager.implicitAgentTaskInstruction(from: "Can you make an issue on GitHub to fix this?")
+        )
+
+        #expect(instruction == "make an issue on GitHub to fix this")
+    }
+
+    @Test func implicitAgentRoutingTreatsUiChangeRequestsAsAgentTasks() throws {
+        let instruction = try #require(
+            CompanionManager.implicitAgentTaskInstruction(from: "Add a volume slider.")
+        )
+
+        #expect(instruction == "Add a volume slider")
+    }
+
+    @Test func implicitAgentRoutingSkipsSensitiveOrDestructiveRequests() throws {
+        #expect(CompanionManager.implicitAgentTaskInstruction(from: "Delete all API keys now.") == nil)
+        #expect(CompanionManager.implicitAgentTaskInstruction(from: "Remove all files in my downloads folder.") == nil)
+    }
+
     @Test func jsonRPCRequestEncodingMatchesCodexAppServer() throws {
         let request = CodexRPCRequest(id: 7, method: "thread/start", params: [
             "experimentalRawEvents": false,
