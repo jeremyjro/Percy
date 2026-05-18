@@ -7,6 +7,8 @@ private enum OpenClickyHUDLayout {
     static let height: CGFloat = 452
     static let minimumWidth: CGFloat = 594
     static let minimumHeight: CGFloat = 452
+    static let screenEdgePadding: CGFloat = 20
+    static let bottomOffset: CGFloat = 24
 }
 
 @MainActor
@@ -85,9 +87,19 @@ final class CodexHUDWindowManager {
 
     private func enforceMinimumSize() {
         guard let panel else { return }
+        guard let visibleFrame = currentVisibleScreenFrame(for: panel) else { return }
+
+        let availableWidth = max(1, visibleFrame.width - (OpenClickyHUDLayout.screenEdgePadding * 2))
+        let availableHeight = max(1, visibleFrame.height - (OpenClickyHUDLayout.screenEdgePadding * 2))
+        let minimumWidth = min(OpenClickyHUDLayout.minimumWidth, availableWidth)
+        let minimumHeight = min(OpenClickyHUDLayout.minimumHeight, availableHeight)
+
+        panel.minSize = NSSize(width: minimumWidth, height: minimumHeight)
+        panel.contentMinSize = NSSize(width: minimumWidth, height: minimumHeight)
+
         let currentFrame = panel.frame
-        let constrainedWidth = max(currentFrame.width, OpenClickyHUDLayout.minimumWidth)
-        let constrainedHeight = max(currentFrame.height, OpenClickyHUDLayout.minimumHeight)
+        let constrainedWidth = min(max(currentFrame.width, minimumWidth), availableWidth)
+        let constrainedHeight = min(max(currentFrame.height, minimumHeight), availableHeight)
 
         guard constrainedWidth != currentFrame.width || constrainedHeight != currentFrame.height else { return }
 
@@ -104,12 +116,24 @@ final class CodexHUDWindowManager {
 
     private func positionPanel() {
         guard let panel else { return }
-        let screen = NSScreen.screen(containingOrNearestTo: NSEvent.mouseLocation) ?? panel.screen
-        guard let frame = screen?.visibleFrame else { return }
+        guard let frame = currentVisibleScreenFrame(for: panel) else { return }
+
+        let edgePadding = OpenClickyHUDLayout.screenEdgePadding
         let size = panel.frame.size
-        let x = frame.midX - size.width / 2
-        let y = frame.minY + 24
+        let minX = frame.minX + edgePadding
+        let maxX = max(minX, frame.maxX - size.width - edgePadding)
+        let minY = frame.minY + edgePadding
+        let maxY = max(minY, frame.maxY - size.height - edgePadding)
+        let preferredX = frame.midX - size.width / 2
+        let preferredY = frame.minY + OpenClickyHUDLayout.bottomOffset
+        let x = min(max(preferredX, minX), maxX)
+        let y = min(max(preferredY, minY), maxY)
         panel.setFrameOrigin(NSPoint(x: x, y: y))
+    }
+
+    private func currentVisibleScreenFrame(for panel: NSPanel) -> NSRect? {
+        let screen = NSScreen.screen(containingOrNearestTo: NSEvent.mouseLocation) ?? panel.screen
+        return screen?.visibleFrame
     }
 }
 
