@@ -265,11 +265,27 @@ final class CodexAgentSession: ObservableObject, Identifiable {
     }
 
     var latestActivitySummary: String? {
-        Self.latestActivitySummary(from: entries)
+        if isTurnActiveForChatQueue, let statusActivity = latestActivityStatusLine {
+            return Self.spokenSnippet(from: statusActivity, maxLength: 120)
+        }
+        if let transcriptActivity = Self.latestActivitySummary(from: entries) {
+            return transcriptActivity
+        }
+        return latestActivityStatusLine.map { Self.spokenSnippet(from: $0, maxLength: 120) }
     }
 
     var latestActivityDisplaySummary: String? {
-        Self.latestActivityDisplaySummary(from: entries)
+        if isTurnActiveForChatQueue, let statusActivity = latestActivityStatusLine {
+            return Self.displaySnippet(from: statusActivity, maxLength: 1_200)
+        }
+        if let transcriptActivity = Self.latestActivityDisplaySummary(from: entries) {
+            return transcriptActivity
+        }
+        return latestActivityStatusLine.map { Self.displaySnippet(from: $0, maxLength: 1_200) }
+    }
+
+    private var latestActivityStatusLine: String? {
+        activityStatusLines.reversed().first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     }
 
     var latestActivityDate: Date {

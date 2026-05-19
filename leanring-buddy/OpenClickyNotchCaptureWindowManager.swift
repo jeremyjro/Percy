@@ -142,7 +142,7 @@ final class OpenClickyNotchCaptureWindowManager {
     private static let statusPanelWidthScale: CGFloat = 0.12
     private static let statusPanelHorizontalNudge: CGFloat = 0
     private static let minimumBuiltInCollapsedPanelWidth: CGFloat = 76
-    private static let compactBuiltInVoicePanelWidth: CGFloat = 92
+    private static let compactBuiltInVoicePanelWidth: CGFloat = 150
     private static let minimumVoicePanelWidth: CGFloat = 150
     private static let minimumExternalCollapsedPanelWidth: CGFloat = 80
     private static let maximumExternalCollapsedPanelWidth: CGFloat = 182
@@ -332,7 +332,7 @@ final class OpenClickyNotchCaptureWindowManager {
                 accentColor: Self.nsAccentColor(for: nil),
                 foregroundAppIcon: foregroundAppIcon,
                 foregroundAppName: foregroundAppName,
-                hidesStatusText: primaryScreen.map(Self.isLikelyBuiltInNotchScreen) ?? false
+                hidesStatusText: false
             )
             let voiceWidth = Self.voicePanelWidth(for: primaryScreen, appName: foregroundAppName)
             showPanel(activating: false, width: voiceWidth, height: Self.voicePanelHeight)
@@ -349,7 +349,7 @@ final class OpenClickyNotchCaptureWindowManager {
                     accentColor: Self.nsAccentColor(for: nil),
                     foregroundAppIcon: self?.foregroundAppIcon,
                     foregroundAppName: self?.foregroundAppName ?? "Current app",
-                    hidesStatusText: Self.isLikelyBuiltInNotchScreen(screen)
+                    hidesStatusText: false
                 )
             }
         }

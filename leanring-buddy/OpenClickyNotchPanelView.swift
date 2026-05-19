@@ -1929,6 +1929,7 @@ struct OpenClickyNotchPanelView: View {
 
     private func expandedAgentConversation(for session: CodexAgentSession) -> some View {
         let entries = agentConversationEntries(for: session)
+        let activityLines = agentLiveActivityLines(for: session)
         return VStack(spacing: 8) {
             ScrollViewReader { proxy in
                 ScrollView(.vertical, showsIndicators: true) {
@@ -1946,6 +1947,11 @@ struct OpenClickyNotchPanelView: View {
                                 compactChatBubble(entry)
                                     .id(entry.id)
                             }
+                        }
+
+                        ForEach(Array(activityLines.enumerated()), id: \.offset) { index, line in
+                            agentLiveActivityRow(line)
+                                .id("\(session.id.uuidString)-agent-live-activity-\(index)")
                         }
 
                         if session.isTurnActiveForChatQueue {
@@ -2090,6 +2096,36 @@ struct OpenClickyNotchPanelView: View {
             }
         }
         .animation(.easeOut(duration: 0.16), value: isExpandedAgentDropTargeted)
+    }
+
+    private func agentLiveActivityLines(for session: CodexAgentSession) -> [String] {
+        guard session.isTurnActiveForChatQueue else { return [] }
+        var seen = Set<String>()
+        let lines = session.activityStatusLines.reversed().compactMap { rawLine -> String? in
+            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !line.isEmpty, !seen.contains(line) else { return nil }
+            seen.insert(line)
+            return line
+        }
+        return Array(lines.prefix(3)).reversed()
+    }
+
+    private func agentLiveActivityRow(_ line: String) -> some View {
+        HStack(alignment: .center, spacing: 7) {
+            ProgressView()
+                .controlSize(.small)
+                .scaleEffect(0.62)
+            Text(line)
+                .font(appUIFont(size: max(10, subtextFontSize), weight: .semibold))
+                .foregroundColor(DS.Colors.textSecondary)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, max(9, bodyFontSize * 0.75))
+        .padding(.vertical, max(7, bodyFontSize * 0.52))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 13, style: .continuous).fill(Color.white.opacity(0.045)))
+        .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).stroke(Color.white.opacity(0.055), lineWidth: 0.5))
     }
 
     private func agentConversationEntries(for session: CodexAgentSession) -> [CodexTranscriptEntry] {
