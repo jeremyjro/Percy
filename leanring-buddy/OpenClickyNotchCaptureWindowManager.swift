@@ -1498,7 +1498,7 @@ final class OpenClickyNotchCaptureWindowManager {
         mirroredStatusPanels.values.forEach { applyToWindow($0) }
     }
 
-    private static func nsAccentColor(for theme: ClickyAccentTheme?) -> NSColor {
+    static func nsAccentColor(for theme: ClickyAccentTheme?) -> NSColor {
         switch theme ?? ClickyAccentTheme.current {
         case .blue:
             return NSColor(calibratedRed: 0.20, green: 0.50, blue: 1.00, alpha: 1.0)
@@ -2397,7 +2397,7 @@ open class NSGlassEffectView: NSView {
     // Stub class mapping to native macOS 26 Tahoe NSGlassEffectView at runtime.
 }
 
-private final class OpenClickyLiquidGlassBackdropView: NSView {
+final class OpenClickyLiquidGlassBackdropView: NSView {
     enum Strength {
         case compact
         case expanded
@@ -2416,6 +2416,20 @@ private final class OpenClickyLiquidGlassBackdropView: NSView {
     private var roundsTopCorners = true
     private var accentColor: NSColor = .systemBlue
     private var strength: Strength = .compact
+
+    private var isDarkAppearance: Bool {
+        if #available(macOS 10.14, *) {
+            if let appearance = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) {
+                return appearance == .darkAqua
+            }
+        }
+        return false
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
+    }
 
     init(cornerRadius: CGFloat) {
         self.cornerRadius = cornerRadius
@@ -2501,27 +2515,41 @@ private final class OpenClickyLiquidGlassBackdropView: NSView {
         let path = roundedPath(in: bounds.insetBy(dx: 0.5, dy: 0.5))
         
         if simulatedLiquidGlass {
+            let isDark = isDarkAppearance
+            
             // Glass Tint Overlay (translucent frosted white reflection)
-            NSColor.white.withAlphaComponent(0.06).setFill()
+            // In dark mode: white with 0.06 alpha.
+            // In light mode: white with 0.20 alpha (to enhance the white frost background overlay on top of popover material).
+            let tintColor = isDark ? NSColor.white.withAlphaComponent(0.06) : NSColor.white.withAlphaComponent(0.20)
+            tintColor.setFill()
             path.fill()
             
             // Refracting Double Border:
-            // 1. Outer refracting border (1.0pt, 0.20 opacity)
-            NSColor.white.withAlphaComponent(0.20).setStroke()
+            // 1. Outer refracting border (1.0pt)
+            // In dark mode: white with 0.20 alpha.
+            // In light mode: black with 0.08 alpha (to provide dark refracting edge contrast).
+            let outerStroke = isDark ? NSColor.white.withAlphaComponent(0.20) : NSColor.black.withAlphaComponent(0.08)
+            outerStroke.setStroke()
             path.lineWidth = 1.0
             path.stroke()
             
-            // 2. Inner refracting border (1.0pt, inset by 1.0pt, 0.08 opacity)
+            // 2. Inner refracting border (1.0pt, inset by 1.0pt)
+            // In dark mode: white with 0.08 alpha.
+            // In light mode: black with 0.03 alpha.
             let innerPath = roundedPath(in: bounds.insetBy(dx: 1.5, dy: 1.5))
-            NSColor.white.withAlphaComponent(0.08).setStroke()
+            let innerStroke = isDark ? NSColor.white.withAlphaComponent(0.08) : NSColor.black.withAlphaComponent(0.03)
+            innerStroke.setStroke()
             innerPath.lineWidth = 1.0
             innerPath.stroke()
             
             // Specular Reflection / diagonal sheen highlight
+            // In dark mode: white with 0.035 alpha.
+            // In light mode: white with 0.08 alpha (requires slightly more opacity to stand out on light background).
+            let sheenColor = isDark ? NSColor.white.withAlphaComponent(0.035) : NSColor.white.withAlphaComponent(0.08)
             let sheenPath = NSBezierPath()
             sheenPath.move(to: NSPoint(x: bounds.minX, y: bounds.minY))
             sheenPath.line(to: NSPoint(x: bounds.maxX, y: bounds.maxY))
-            NSColor.white.withAlphaComponent(0.035).setStroke()
+            sheenColor.setStroke()
             sheenPath.lineWidth = 4.0
             sheenPath.stroke()
         } else {

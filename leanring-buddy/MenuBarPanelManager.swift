@@ -38,6 +38,7 @@ final class MenuBarPanelManager: NSObject {
     private var contentResizeWorkItem: DispatchWorkItem?
     private var isPanelPinned = false
     private var themeObserver: NSObjectProtocol?
+    private var glassBackdrop: OpenClickyLiquidGlassBackdropView?
 
     private let companionManager: CompanionManager
     private let panelWidth: CGFloat = 356
@@ -88,6 +89,7 @@ final class MenuBarPanelManager: NSObject {
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.refreshThemeAppearance()
+                self?.refreshGlassBackdropAccent()
             }
         }
     }
@@ -350,10 +352,34 @@ final class MenuBarPanelManager: NSObject {
         menuBarPanel.titlebarAppearsTransparent = true
         applyPanelMinimumSize(to: menuBarPanel)
 
-        menuBarPanel.contentView = hostingView
+        let containerView = NSView(frame: NSRect(x: 0, y: 0, width: panelWidth, height: panelHeight))
+        containerView.autoresizingMask = [.width, .height]
+        containerView.wantsLayer = true
+        containerView.layer?.backgroundColor = .clear
+
+        let backdrop = OpenClickyLiquidGlassBackdropView(cornerRadius: 28)
+        backdrop.frame = containerView.bounds
+        backdrop.autoresizingMask = [.width, .height]
+        glassBackdrop = backdrop
+        containerView.addSubview(backdrop)
+
+        hostingView.frame = containerView.bounds
+        containerView.addSubview(hostingView)
+
+        menuBarPanel.contentView = containerView
         panel = menuBarPanel
         applyPinnedPanelBehavior()
         refreshThemeAppearance()
+        refreshGlassBackdropAccent()
+    }
+
+    private func refreshGlassBackdropAccent() {
+        glassBackdrop?.configure(
+            cornerRadius: 28,
+            roundsTopCorners: true,
+            accentColor: OpenClickyNotchCaptureWindowManager.nsAccentColor(for: nil),
+            strength: .expanded
+        )
     }
 
     private func refreshThemeAppearance() {

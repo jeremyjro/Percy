@@ -107,14 +107,34 @@ struct OpenClickyNotchPanelView: View {
     }
 
     private func appResolvedWeight(_ weight: Font.Weight) -> Font.Weight {
-        guard appBoldTextEnabled else { return weight }
-        switch weight {
-        case .regular, .medium:
-            return .semibold
-        case .semibold:
-            return .bold
-        default:
-            return weight
+        if appBoldTextEnabled {
+            switch weight {
+            case .light, .regular:
+                return .medium
+            case .medium:
+                return .semibold
+            case .semibold:
+                return .bold
+            case .bold, .heavy, .black:
+                return .black
+            default:
+                return weight
+            }
+        } else {
+            switch weight {
+            case .black, .heavy:
+                return .semibold
+            case .bold:
+                return .medium
+            case .semibold:
+                return .medium
+            case .medium:
+                return .regular
+            case .regular:
+                return .regular
+            default:
+                return weight
+            }
         }
     }
     @State private var isCompactChatExpanded = false
@@ -439,11 +459,13 @@ struct OpenClickyNotchPanelView: View {
         .background(
             RoundedRectangle(cornerRadius: 28, style: .continuous)
                 .fill(
-                    LinearGradient(
-                        colors: [DS.Colors.surface1.opacity(0.98), (DS.Colors.isDarkMode ? Color.black : Color.white).opacity(0.96)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
+                    OpenClickyLiquidGlassBackdropView.isLiquidGlassAvailable ?
+                        AnyShapeStyle(Color.clear) :
+                        AnyShapeStyle(LinearGradient(
+                            colors: [DS.Colors.surface1.opacity(0.98), (DS.Colors.isDarkMode ? Color.black : Color.white).opacity(0.96)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ))
                 )
         )
         .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))

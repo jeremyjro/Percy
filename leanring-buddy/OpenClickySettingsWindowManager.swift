@@ -209,14 +209,34 @@ struct OpenClickySettingsView: View {
     }
 
     private func appResolvedWeight(_ weight: Font.Weight) -> Font.Weight {
-        guard appBoldTextEnabled else { return weight }
-        switch weight {
-        case .regular, .medium:
-            return .semibold
-        case .semibold:
-            return .bold
-        default:
-            return weight
+        if appBoldTextEnabled {
+            switch weight {
+            case .light, .regular:
+                return .medium
+            case .medium:
+                return .semibold
+            case .semibold:
+                return .bold
+            case .bold, .heavy, .black:
+                return .black
+            default:
+                return weight
+            }
+        } else {
+            switch weight {
+            case .black, .heavy:
+                return .semibold
+            case .bold:
+                return .medium
+            case .semibold:
+                return .medium
+            case .medium:
+                return .regular
+            case .regular:
+                return .regular
+            default:
+                return weight
+            }
         }
     }
 
