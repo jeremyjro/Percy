@@ -2428,6 +2428,7 @@ final class OpenClickyLiquidGlassBackdropView: NSView {
     private let glassContainerView = NSGlassEffectContainerView()
     private let glassContentView = NSView()
     private let glassView = NSGlassEffectView()
+    private let persistentAccentView = OpenClickyLiquidGlassAccentWashView()
     private var defaultsObserver: NSObjectProtocol?
     private let maskLayer = CAShapeLayer()
     private var cornerRadius: CGFloat
@@ -2456,6 +2457,8 @@ final class OpenClickyLiquidGlassBackdropView: NSView {
         glassContentView.addSubview(glassView)
         addSubview(glassContainerView)
 
+        persistentAccentView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(persistentAccentView)
 
         NSLayoutConstraint.activate([
             glassContainerView.topAnchor.constraint(equalTo: topAnchor),
@@ -2466,7 +2469,12 @@ final class OpenClickyLiquidGlassBackdropView: NSView {
             glassView.topAnchor.constraint(equalTo: glassContentView.topAnchor),
             glassView.leadingAnchor.constraint(equalTo: glassContentView.leadingAnchor),
             glassView.trailingAnchor.constraint(equalTo: glassContentView.trailingAnchor),
-            glassView.bottomAnchor.constraint(equalTo: glassContentView.bottomAnchor)
+            glassView.bottomAnchor.constraint(equalTo: glassContentView.bottomAnchor),
+
+            persistentAccentView.topAnchor.constraint(equalTo: topAnchor),
+            persistentAccentView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            persistentAccentView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            persistentAccentView.bottomAnchor.constraint(equalTo: bottomAnchor)
         ])
 
         applyShape()
@@ -2498,6 +2506,14 @@ final class OpenClickyLiquidGlassBackdropView: NSView {
         glassView.style = .regular
         glassView.cornerRadius = cornerRadius
         glassView.tintColor = nativeGlassTint(opacity: opacity, frosting: frosting)
+        persistentAccentView.configure(
+            accentColor: accentColor,
+            opacity: opacity,
+            frosting: frosting,
+            cornerRadius: cornerRadius,
+            roundsTopCorners: roundsTopCorners,
+            strength: strength
+        )
         needsDisplay = true
     }
 
@@ -2538,13 +2554,16 @@ final class OpenClickyLiquidGlassBackdropView: NSView {
         }
         layer?.backgroundColor = NSColor.clear.cgColor
         glassView.cornerRadius = cornerRadius
+        persistentAccentView.cornerRadius = cornerRadius
+        persistentAccentView.roundsTopCorners = roundsTopCorners
+        persistentAccentView.needsDisplay = true
     }
 
     private func nativeGlassTint(opacity: Double, frosting: Double) -> NSColor? {
         let clampedFrosting = min(max(frosting, 0.0), 1.0)
         let clampedOpacity = min(max(opacity, 0.0), 1.0)
-        let strengthBoost = strength == .expanded ? 0.03 : 0.0
-        let alpha = CGFloat(0.02 + strengthBoost + clampedOpacity * 0.04 + clampedFrosting * 0.10)
+        let strengthBoost = strength == .expanded ? 0.012 : 0.0
+        let alpha = CGFloat(0.006 + strengthBoost + clampedOpacity * 0.012 + clampedFrosting * 0.025)
         return accentColor.withAlphaComponent(alpha)
     }
 
@@ -2568,6 +2587,87 @@ final class OpenClickyLiquidGlassBackdropView: NSView {
         path.addQuadCurve(to: CGPoint(x: rect.minX, y: rect.minY + radius), control: CGPoint(x: rect.minX, y: rect.minY))
         path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
         path.closeSubpath()
+        return path
+    }
+}
+
+private final class OpenClickyLiquidGlassAccentWashView: NSView {
+    var accentColor: NSColor = .systemBlue { didSet { needsDisplay = true } }
+    var glassOpacity: Double = 0.75 { didSet { needsDisplay = true } }
+    var glassFrosting: Double = 0.20 { didSet { needsDisplay = true } }
+    var cornerRadius: CGFloat = 28 { didSet { needsDisplay = true } }
+    var roundsTopCorners: Bool = true { didSet { needsDisplay = true } }
+    var strength: OpenClickyLiquidGlassBackdropView.Strength = .expanded { didSet { needsDisplay = true } }
+
+    override var isFlipped: Bool { true }
+
+    func configure(
+        accentColor: NSColor,
+        opacity: Double,
+        frosting: Double,
+        cornerRadius: CGFloat,
+        roundsTopCorners: Bool,
+        strength: OpenClickyLiquidGlassBackdropView.Strength
+    ) {
+        self.accentColor = accentColor
+        self.glassOpacity = opacity
+        self.glassFrosting = frosting
+        self.cornerRadius = cornerRadius
+        self.roundsTopCorners = roundsTopCorners
+        self.strength = strength
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard bounds.width > 1, bounds.height > 1 else { return }
+        let clampedOpacity = min(max(glassOpacity, 0.0), 1.0)
+        let clampedFrosting = min(max(glassFrosting, 0.0), 1.0)
+        let baseAlpha = strength == .expanded ? 0.050 : 0.038
+        let accentAlpha = CGFloat(baseAlpha + clampedOpacity * 0.018 + clampedFrosting * 0.020)
+
+        NSGraphicsContext.saveGraphicsState()
+        clippedPath().addClip()
+
+        accentColor.withAlphaComponent(accentAlpha).setFill()
+        bounds.fill()
+
+        let gradient = NSGradient(colors: [
+            accentColor.withAlphaComponent(accentAlpha * 0.95),
+            accentColor.withAlphaComponent(accentAlpha * 0.32),
+            NSColor.white.withAlphaComponent(strength == .expanded ? 0.014 : 0.010)
+        ])
+        gradient?.draw(
+            from: NSPoint(x: bounds.minX, y: bounds.minY),
+            to: NSPoint(x: bounds.maxX, y: bounds.maxY),
+            options: []
+        )
+
+        NSGraphicsContext.restoreGraphicsState()
+    }
+
+    private func clippedPath() -> NSBezierPath {
+        let rect = bounds.insetBy(dx: 0.5, dy: 0.5)
+        guard !roundsTopCorners else {
+            return NSBezierPath(roundedRect: rect, xRadius: cornerRadius, yRadius: cornerRadius)
+        }
+
+        let radius = min(cornerRadius, rect.width / 2, rect.height / 2)
+        let path = NSBezierPath()
+        path.move(to: NSPoint(x: rect.minX, y: rect.maxY))
+        path.line(to: NSPoint(x: rect.maxX, y: rect.maxY))
+        path.line(to: NSPoint(x: rect.maxX, y: rect.minY + radius))
+        path.curve(
+            to: NSPoint(x: rect.maxX - radius, y: rect.minY),
+            controlPoint1: NSPoint(x: rect.maxX, y: rect.minY + radius * 0.45),
+            controlPoint2: NSPoint(x: rect.maxX - radius * 0.45, y: rect.minY)
+        )
+        path.line(to: NSPoint(x: rect.minX + radius, y: rect.minY))
+        path.curve(
+            to: NSPoint(x: rect.minX, y: rect.minY + radius),
+            controlPoint1: NSPoint(x: rect.minX + radius * 0.45, y: rect.minY),
+            controlPoint2: NSPoint(x: rect.minX, y: rect.minY + radius * 0.45)
+        )
+        path.line(to: NSPoint(x: rect.minX, y: rect.maxY))
+        path.close()
         return path
     }
 }
