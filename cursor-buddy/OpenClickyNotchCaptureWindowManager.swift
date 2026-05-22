@@ -1152,11 +1152,19 @@ final class OpenClickyNotchCaptureWindowManager {
     }
 
     private static func notchHoverRegion(on screen: NSScreen) -> NSRect {
-        let width = max(collapsedPanelWidth(for: screen) + 28, 104)
-        let height = max(collapsedPanelHeight + 24, 36)
+        let baseWidth = collapsedPanelWidth(for: screen) + 28
+        let physicalNotchWidth = hasPhysicalNotch(on: screen)
+            ? (physicalNotchWidth(on: screen) ?? 0)
+            : 0
+        // DynamicNotchKit's compact SwiftUI content only lives on the small
+        // leading/trailing icon areas. Keep the global hover probe wide enough
+        // to include the black physical notch itself so hovering the main
+        // island surface opens it, not just the icons.
+        let width = max(baseWidth, physicalNotchWidth + 72, 196)
+        let height = max(collapsedPanelHeight + 28, 48)
         return NSRect(
             x: screen.frame.midX - width / 2,
-            y: statusLozengeY(for: NSSize(width: width, height: height), on: screen) - 12,
+            y: statusLozengeY(for: NSSize(width: width, height: height), on: screen) - 16,
             width: width,
             height: height
         )
