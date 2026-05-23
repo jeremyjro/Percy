@@ -158,6 +158,8 @@ final class OpenClickyExternalControlBridgeServer: @unchecked Sendable {
                 "name": "OpenClicky External Control Bridge",
                 "port": port,
                 "transport": "local-http+sse",
+                "bridgeTokenRequired": true,
+                "bridgeTokenConfigured": AppBundleConfiguration.externalControlBridgeToken() != nil,
                 "tools": ["openclicky_point", "openclicky_point_many", "show_cursor", "show_cursors", "show_caption", "screenshot", "clear", "speak", "notify"],
                 "multiToolEndpoints": ["/mcp/calls", "/tools/calls"],
                 "inferenceProxyEnabled": AppBundleConfiguration.externalInferenceProxyEnabled()
@@ -166,6 +168,14 @@ final class OpenClickyExternalControlBridgeServer: @unchecked Sendable {
                 body["proxyEndpoints"] = ["/v1/messages", "/v1/responses", "/v1/chat/completions"]
             }
             sendJSON(body, statusCode: 200, on: connection)
+            return
+        }
+
+        guard hasValidBridgeToken(request) else {
+            sendJSON([
+                "ok": false,
+                "error": "OpenClicky bridge token required. Configure OPENCLICKY_BRIDGE_TOKEN or the bridge token setting."
+            ], statusCode: 401, on: connection)
             return
         }
 
@@ -305,13 +315,26 @@ final class OpenClickyExternalControlBridgeServer: @unchecked Sendable {
     private func hasValidBridgeToken(_ request: HTTPRequest) -> Bool {
         guard let configuredToken = AppBundleConfiguration.externalControlBridgeToken(),
               !configuredToken.isEmpty else { return false }
-        if request.headers["x-openclicky-token"] == configuredToken {
+        if Self.constantTimeEquals(request.headers["x-openclicky-token"], configuredToken) {
             return true
         }
-        if request.headers["authorization"] == "Bearer \(configuredToken)" {
+        if Self.constantTimeEquals(request.headers["authorization"], "Bearer \(configuredToken)") {
             return true
         }
         return false
+    }
+
+    private static func constantTimeEquals(_ lhs: String?, _ rhs: String) -> Bool {
+        guard let lhs,
+              let lhsData = lhs.data(using: .utf8),
+              let rhsData = rhs.data(using: .utf8),
+              lhsData.count == rhsData.count else { return false }
+
+        var difference: UInt8 = 0
+        for (left, right) in zip(lhsData, rhsData) {
+            difference |= left ^ right
+        }
+        return difference == 0
     }
 
     private func proxyInferenceRequest(_ request: HTTPRequest, on connection: NWConnection) {

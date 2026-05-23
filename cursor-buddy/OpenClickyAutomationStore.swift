@@ -17,6 +17,7 @@ import Foundation
 final class OpenClickyAutomationStore: ObservableObject {
   static let shared = OpenClickyAutomationStore()
   static let skillDiscoveryAutomationName = "App skill discovery"
+  private static let skillDiscoveryDefaultDisabledMigrationKey = "OpenClickySkillDiscoveryAutomationDefaultDisabledMigration.v1"
 
   static var skillDiscoverySuggestionsURL: URL {
     let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
@@ -69,6 +70,7 @@ final class OpenClickyAutomationStore: ObservableObject {
   private let storeURL: URL
   private var timer: Timer?
   private weak var companion: CompanionManager?
+  private var runningAutomationSessionIDs: [UUID: UUID] = [:]
 
   private init() {
     let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
@@ -103,7 +105,7 @@ final class OpenClickyAutomationStore: ObservableObject {
 
   func add(_ automation: OpenClickyAutomation) {
     var a = automation
-    a.nextRun = a.computingNextRun(after: Date())
+    a.nextRun = a.enabled ? a.computingNextRun(after: Date()) : nil
     automations.append(a)
     save()
   }
@@ -112,7 +114,7 @@ final class OpenClickyAutomationStore: ObservableObject {
     guard let idx = automations.firstIndex(where: { $0.id == automation.id }) else { return }
     guard !isProtectedSystemAutomation(automations[idx]) else { return }
     var a = automation
-    a.nextRun = a.computingNextRun(after: Date())
+    a.nextRun = a.enabled ? a.computingNextRun(after: Date()) : nil
     automations[idx] = a
     save()
   }
@@ -135,14 +137,27 @@ final class OpenClickyAutomationStore: ObservableObject {
 
     if let idx = automations.firstIndex(where: { isProtectedSystemAutomation($0) || $0.name == Self.skillDiscoveryAutomationName }) {
       let existing = automations[idx]
+      var repaired = existing
+      var shouldSave = false
+
       if existing.name != Self.skillDiscoveryAutomationName ||
           existing.prompt != Self.skillDiscoveryAutomationPrompt ||
           existing.agentSlug != OpenClickyAgentStore.skillDiscoveryAgentSlug {
-        var repaired = existing
         repaired.name = Self.skillDiscoveryAutomationName
         repaired.prompt = Self.skillDiscoveryAutomationPrompt
         repaired.agentSlug = OpenClickyAgentStore.skillDiscoveryAgentSlug
         repaired.nextRun = repaired.enabled ? repaired.computingNextRun(after: Date()) : nil
+        shouldSave = true
+      }
+
+      if !UserDefaults.standard.bool(forKey: Self.skillDiscoveryDefaultDisabledMigrationKey) {
+        repaired.enabled = false
+        repaired.nextRun = nil
+        UserDefaults.standard.set(true, forKey: Self.skillDiscoveryDefaultDisabledMigrationKey)
+        shouldSave = true
+      }
+
+      if shouldSave {
         automations[idx] = repaired
         save()
         return repaired
@@ -155,8 +170,9 @@ final class OpenClickyAutomationStore: ObservableObject {
       schedule: .interval(seconds: 6 * 60 * 60),
       prompt: Self.skillDiscoveryAutomationPrompt,
       agentSlug: OpenClickyAgentStore.skillDiscoveryAgentSlug,
-      enabled: true
+      enabled: false
     )
+    UserDefaults.standard.set(true, forKey: Self.skillDiscoveryDefaultDisabledMigrationKey)
     add(automation)
     return automation
   }
@@ -172,12 +188,23 @@ final class OpenClickyAutomationStore: ObservableObject {
   // MARK: tick
 
   private func tick() {
+    pruneRunningAutomationSessions()
+
     let now = Date()
     var didMutate = false
     for i in automations.indices {
       guard automations[i].enabled else { continue }
       if let next = automations[i].nextRun, next <= now {
-        fire(automation: automations[i])
+        if isAutomationRunning(automations[i]) {
+          automations[i].nextRun = now.addingTimeInterval(60)
+          didMutate = true
+          continue
+        }
+
+        let firedSessionID = fire(automation: automations[i])
+        if let firedSessionID {
+          runningAutomationSessionIDs[automations[i].id] = firedSessionID
+        }
         automations[i].lastRun = now
         automations[i].nextRun = automations[i].computingNextRun(after: now)
         didMutate = true
@@ -189,14 +216,43 @@ final class OpenClickyAutomationStore: ObservableObject {
     if didMutate { save() }
   }
 
-  private func fire(automation: OpenClickyAutomation) {
-    guard let companion else { return }
+  private func pruneRunningAutomationSessions() {
+    guard let companion else {
+      runningAutomationSessionIDs.removeAll()
+      return
+    }
+
+    runningAutomationSessionIDs = runningAutomationSessionIDs.filter { _, sessionID in
+      guard let session = companion.codexAgentSessions.first(where: { $0.id == sessionID }) else {
+        return false
+      }
+      if session.isTurnActiveForChatQueue {
+        return true
+      }
+      switch session.status {
+      case .starting, .running:
+        return true
+      case .stopped, .ready, .failed:
+        return false
+      }
+    }
+  }
+
+  private func isAutomationRunning(_ automation: OpenClickyAutomation) -> Bool {
+    runningAutomationSessionIDs[automation.id] != nil
+  }
+
+  @discardableResult
+  private func fire(automation: OpenClickyAutomation) -> UUID? {
+    guard let companion else { return nil }
     let prompt = automation.prompt
     if let slug = automation.agentSlug, let agent = OpenClickyAgentStore.shared.agent(slug: slug) {
       let session = companion.createAndSelectNewCodexAgentSession(asAgent: agent)
       session.submitPromptFromUI(prompt, screenContext: nil)
+      return session.id
     } else {
       companion.submitAgentPromptFromUI(prompt)
+      return nil
     }
   }
 
