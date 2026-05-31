@@ -172,6 +172,7 @@ private enum OpenClickySettingsSection: String, CaseIterable, Identifiable {
 
 struct OpenClickySettingsView: View {
     @ObservedObject var companionManager: CompanionManager
+    @ObservedObject private var wakeWordManager: OpenClickyWakeWordManager
     @ObservedObject private var session: CodexAgentSession
     @ObservedObject private var nativeComputerUseController: OpenClickyNativeComputerUseController
     @ObservedObject private var backgroundComputerUseController: OpenClickyBackgroundComputerUseController
@@ -226,6 +227,7 @@ struct OpenClickySettingsView: View {
 
     init(companionManager: CompanionManager) {
         self.companionManager = companionManager
+        self.wakeWordManager = companionManager.wakeWordManager
         self.session = companionManager.codexAgentSession
         self.nativeComputerUseController = companionManager.nativeComputerUseController
         self.backgroundComputerUseController = companionManager.backgroundComputerUseController
@@ -671,6 +673,36 @@ struct OpenClickySettingsView: View {
             }
 
             settingsGroup("Listening / transcription") {
+                LazyVGrid(columns: settingsOptionColumns(3), spacing: 8) {
+                    ForEach(OpenClickyVoiceActivationMode.allCases) { mode in
+                        optionButton(
+                            title: mode.label,
+                            subtitle: mode.subtitle,
+                            isSelected: companionManager.voiceActivationMode == mode,
+                            action: { companionManager.setVoiceActivationMode(mode) }
+                        )
+                    }
+                }
+                .padding(14)
+
+                valueRow(
+                    title: wakeWordManager.isListening ? "Wake word armed" : "Wake word",
+                    subtitle: companionManager.voiceActivationMode.usesWakeWord
+                        ? (wakeWordManager.isListening
+                            ? "Say “Hey Clicky” to start a voice turn. Wake detection uses on-device Apple Speech."
+                            : "Activation keys toggle the local Hey Clicky listener; always-listening mode starts it automatically.")
+                        : "Disabled while Push to talk is selected.",
+                    systemImageName: wakeWordManager.isListening ? "ear.badge.waveform" : "ear"
+                )
+
+                if let wakeWordError = wakeWordManager.lastErrorMessage,
+                   !wakeWordError.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    warningRow(
+                        title: "Wake-word listener",
+                        subtitle: wakeWordError
+                    )
+                }
+
                 if OpenClickyModelCatalog.isSpeechModelID(companionManager.selectedModel) {
                     valueRow(
                         title: "Current input path",

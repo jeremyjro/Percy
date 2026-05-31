@@ -197,6 +197,7 @@ final class CompanionManager: ObservableObject {
             notchCaptureWindowManager.updateVoiceState(Self.notchVoicePhase(for: voiceState), audioPowerLevel: currentAudioPowerLevel)
             if voiceState == .idle, oldValue != .idle {
                 scheduleVoiceResponseCaptionClear(after: 1.2)
+                scheduleWakeWordListeningResumeIfNeeded(reason: "voice_idle")
             }
         }
     }
@@ -280,6 +281,7 @@ final class CompanionManager: ObservableObject {
     private var onboardingMusicFadeVolumeDecrement: Float = 0
 
     let buddyDictationManager = BuddyDictationManager()
+    let wakeWordManager = OpenClickyWakeWordManager()
     let globalPushToTalkShortcutMonitor = GlobalPushToTalkShortcutMonitor()
     let overlayWindowManager = OverlayWindowManager()
     let notchCaptureWindowManager = OpenClickyNotchCaptureWindowManager()
@@ -1123,6 +1125,8 @@ final class CompanionManager: ObservableObject {
     /// speaks again before the delay elapses.
     private var transientHideTask: Task<Void, Never>?
     private var voiceFollowUpStopTask: Task<Void, Never>?
+    private var pendingWakeWordRestartTask: Task<Void, Never>?
+    private var isWakeWordPausedByShortcut = false
 
     /// True when all required permissions (accessibility, screen recording,
     /// microphone, camera, screen content) are granted. Used by the panel to
@@ -1245,6 +1249,9 @@ final class CompanionManager: ObservableObject {
                 "restoredInterruptedDockItems": agentDockItems.count
             ]
         )
+        wakeWordManager.onWakeWordDetected = { [weak self] transcript in
+            self?.handleWakeWordDetected(transcript)
+        }
         // Bind the automation scheduler so cron / interval prompts can fire
         // through this CompanionManager while the app is running.
         OpenClickyAutomationStore.shared.bind(companion: self)
@@ -1685,6 +1692,9 @@ final class CompanionManager: ObservableObject {
         : UserDefaults.standard.bool(forKey: "isClickyCursorEnabled")
 
     @Published var isActivationShortcutEnabled: Bool = true
+    @Published var voiceActivationMode: OpenClickyVoiceActivationMode = OpenClickyVoiceActivationMode.resolved(
+        rawValue: UserDefaults.standard.string(forKey: AppBundleConfiguration.userVoiceActivationModeDefaultsKey)
+    )
 
     func setClickyCursorEnabled(_ enabled: Bool) {
         isClickyCursorEnabled = enabled
@@ -1703,6 +1713,26 @@ final class CompanionManager: ObservableObject {
     func setActivationShortcutEnabled(_ enabled: Bool) {
         isActivationShortcutEnabled = enabled
         globalPushToTalkShortcutMonitor.setActivationShortcutEnabled(enabled)
+        if !enabled {
+            isWakeWordPausedByShortcut = true
+            wakeWordManager.stop(reason: "activation_shortcut_disabled")
+        } else {
+            isWakeWordPausedByShortcut = false
+            startWakeWordListeningIfNeeded(reason: "activation_shortcut_enabled")
+        }
+    }
+
+    func setVoiceActivationMode(_ mode: OpenClickyVoiceActivationMode) {
+        guard voiceActivationMode != mode else { return }
+        voiceActivationMode = mode
+        UserDefaults.standard.set(mode.rawValue, forKey: AppBundleConfiguration.userVoiceActivationModeDefaultsKey)
+        if mode.usesWakeWord {
+            isWakeWordPausedByShortcut = false
+            startWakeWordListeningIfNeeded(reason: "mode_changed")
+        } else {
+            isWakeWordPausedByShortcut = false
+            wakeWordManager.stop(reason: "push_to_talk_mode")
+        }
     }
 
     /// Whether the user has completed onboarding at least once. Persisted
@@ -1735,6 +1765,10 @@ final class CompanionManager: ObservableObject {
         bindVoiceStateObservation()
         bindAudioPowerLevel()
         bindShortcutTransitions()
+        if voiceActivationMode == .alwaysWakeWord {
+            isWakeWordPausedByShortcut = false
+            startWakeWordListeningIfNeeded(reason: "startup")
+        }
         bindAgentSessionObservation()
         startRelaunchableAgentAutoResumeChecks()
         if runtimeMode == .menuBar, !agentDockItems.isEmpty {
@@ -2157,9 +2191,12 @@ final class CompanionManager: ObservableObject {
 
     func stop() {
         globalPushToTalkShortcutMonitor.stop()
+        wakeWordManager.stop(reason: "companion_stop")
         buddyDictationManager.cancelCurrentDictation()
         overlayWindowManager.hideOverlay()
         transientHideTask?.cancel()
+        pendingWakeWordRestartTask?.cancel()
+        pendingWakeWordRestartTask = nil
 
         currentResponseTask?.cancel()
         currentResponseTask = nil
@@ -2260,6 +2297,12 @@ final class CompanionManager: ObservableObject {
 
         if !previouslyHadAll && allPermissionsGranted {
             ClickyAnalytics.trackAllPermissionsGranted()
+        }
+
+        if hasMicrophonePermission, voiceActivationMode == .alwaysWakeWord {
+            startWakeWordListeningIfNeeded(reason: "permissions_refreshed")
+        } else if !hasMicrophonePermission {
+            wakeWordManager.stop(reason: "microphone_permission_missing")
         }
     }
 
@@ -3128,6 +3171,11 @@ final class CompanionManager: ObservableObject {
     private func handleShortcutTransition(_ transition: BuddyPushToTalkShortcut.ShortcutTransition) {
         switch transition {
         case .pressed:
+            if voiceActivationMode.usesWakeWord {
+                guard !showOnboardingVideo else { return }
+                toggleWakeWordListeningFromShortcut()
+                return
+            }
             guard !buddyDictationManager.isDictationInProgress else { return }
             // Don't register push-to-talk while the onboarding video is playing
             guard !showOnboardingVideo else { return }
@@ -3195,6 +3243,9 @@ final class CompanionManager: ObservableObject {
                 )
             }
         case .released:
+            if voiceActivationMode.usesWakeWord {
+                return
+            }
             // Cancel the pending start task in case the user released the shortcut
             // before the async startPushToTalk had a chance to begin recording.
             // Without this, a quick press-and-release drops the release event and
@@ -3231,6 +3282,119 @@ final class CompanionManager: ObservableObject {
     private var activeRealtimeThinkModel: String {
         let model = OpenClickyModelCatalog.voiceResponseModel(withID: selectedModel)
         return model.provider == .deepgram ? deepgramVoiceAgentClient.thinkModel : openAIRealtimeSpeechClient.model
+    }
+
+    private func toggleWakeWordListeningFromShortcut() {
+        guard isActivationShortcutEnabled else { return }
+        if wakeWordManager.isListening || wakeWordManager.isStarting {
+            isWakeWordPausedByShortcut = true
+            wakeWordManager.stop(reason: "activation_shortcut_toggle_off")
+            return
+        }
+        isWakeWordPausedByShortcut = false
+        startWakeWordListeningIfNeeded(reason: "activation_shortcut_toggle_on")
+    }
+
+    private func startWakeWordListeningIfNeeded(reason: String) {
+        guard voiceActivationMode.usesWakeWord,
+              isActivationShortcutEnabled,
+              !isWakeWordPausedByShortcut,
+              voiceState == .idle,
+              !buddyDictationManager.isDictationInProgress,
+              !isRealtimeBidirectionalVoiceCaptureActive,
+              !voiceTTSClient.isPlaying,
+              !openAIRealtimeSpeechClient.isPlaying,
+              !deepgramVoiceAgentClient.isPlaying,
+              !wakeWordManager.isListening,
+              !wakeWordManager.isStarting else {
+            return
+        }
+
+        pendingWakeWordRestartTask?.cancel()
+        pendingWakeWordRestartTask = nil
+        OpenClickyMessageLogStore.shared.append(
+            lane: "voice",
+            direction: "internal",
+            event: "voice.wake_listener.start_requested",
+            fields: [
+                "reason": reason,
+                "mode": voiceActivationMode.rawValue
+            ]
+        )
+        Task { [weak self] in
+            await self?.wakeWordManager.start()
+        }
+    }
+
+    private func scheduleWakeWordListeningResumeIfNeeded(reason: String) {
+        guard voiceActivationMode.usesWakeWord else { return }
+        pendingWakeWordRestartTask?.cancel()
+        pendingWakeWordRestartTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(450))
+            await MainActor.run {
+                guard let self else { return }
+                self.pendingWakeWordRestartTask = nil
+                self.startWakeWordListeningIfNeeded(reason: reason)
+            }
+        }
+    }
+
+    private func handleWakeWordDetected(_ transcript: String) {
+        guard voiceActivationMode.usesWakeWord else { return }
+
+        transientHideTask?.cancel()
+        transientHideTask = nil
+        voiceFollowUpStopTask?.cancel()
+        voiceFollowUpStopTask = nil
+        resetSpeculativeFireForNewUtterance()
+        startPrewarmedScreenshotCaptureIfPossible()
+        showCursorOverlayIfAvailable()
+        NotificationCenter.default.post(name: .clickyDismissPanel, object: nil)
+
+        OpenClickyMessageLogStore.shared.append(
+            lane: "voice",
+            direction: "internal",
+            event: "voice.wake_word.turn_started",
+            fields: [
+                "mode": voiceActivationMode.rawValue,
+                "wakeTranscriptLength": transcript.count
+            ]
+        )
+
+        if shouldUseBidirectionalRealtimeVoiceInput {
+            startBidirectionalRealtimeVoiceCapture(source: "wakeWord")
+            voiceFollowUpStopTask = Task { [weak self] in
+                try? await Task.sleep(nanoseconds: 8_000_000_000)
+                await MainActor.run {
+                    guard let self else { return }
+                    self.voiceFollowUpStopTask = nil
+                    _ = self.finishBidirectionalRealtimeVoiceCaptureIfNeeded(source: "wakeWord")
+                }
+            }
+            return
+        }
+
+        interruptCurrentVoiceResponse()
+        clearDetectedElementLocation()
+        liveHandledComputerUseFingerprints.removeAll()
+        Task { [weak self] in
+            guard let self else { return }
+            await self.buddyDictationManager.startAutoSubmittingDictationFromMicrophoneButton(
+                currentDraftText: "",
+                updateDraftText: { _ in },
+                submitDraftText: { [weak self] finalTranscript in
+                    self?.handleFinalVoiceTranscript(finalTranscript)
+                }
+            )
+        }
+        voiceFollowUpStopTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 8_000_000_000)
+            await MainActor.run {
+                guard let self else { return }
+                self.voiceFollowUpStopTask = nil
+                self.buddyDictationManager.stopPersistentDictationFromMicrophoneButton()
+            }
+        }
     }
 
     private struct BidirectionalRealtimeVoiceResult {
