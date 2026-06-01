@@ -6,6 +6,7 @@
 //
 
 import Testing
+import CoreGraphics
 @testable import OpenClicky
 
 @MainActor
@@ -103,5 +104,28 @@ struct cursor_buddyTests {
                 for: "Can you hear me out before you answer?"
             ) == nil
         )
+    }
+
+    @Test func tutorTargetClickHitTestingUsesPointAndRectTolerance() async throws {
+        #expect(TutorTargetClickTracker.isHit(
+            clickPoint: CGPoint(x: 120, y: 120),
+            targetPoint: CGPoint(x: 100, y: 100),
+            targetRect: nil
+        ))
+        #expect(!TutorTargetClickTracker.isHit(
+            clickPoint: CGPoint(x: 180, y: 180),
+            targetPoint: CGPoint(x: 100, y: 100),
+            targetRect: nil
+        ))
+        #expect(TutorTargetClickTracker.isHit(
+            clickPoint: CGPoint(x: 49, y: 72),
+            targetPoint: nil,
+            targetRect: CGRect(x: 50, y: 70, width: 20, height: 20)
+        ))
+        #expect(!TutorTargetClickTracker.isHit(
+            clickPoint: CGPoint(x: 30, y: 30),
+            targetPoint: nil,
+            targetRect: CGRect(x: 50, y: 70, width: 20, height: 20)
+        ))
     }
 }

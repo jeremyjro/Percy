@@ -1519,6 +1519,7 @@ final class CompanionManager: ObservableObject {
         }
     }
     private let userActivityIdleDetector = UserActivityIdleDetector()
+    private let tutorTargetClickTracker = TutorTargetClickTracker()
     private var isTutorObservationInFlight = false
     private var lastVoiceInteractionCompletedAt: Date = .distantPast
     private static let tutorObservationVoiceCooldown: TimeInterval = 90
@@ -14443,6 +14444,7 @@ final class CompanionManager: ObservableObject {
         tutorIdleCancellable?.cancel()
         tutorIdleCancellable = nil
         userActivityIdleDetector.stop()
+        tutorTargetClickTracker.disarm()
         isTutorObservationInFlight = false
     }
 
@@ -14469,6 +14471,7 @@ final class CompanionManager: ObservableObject {
 
     private func performTutorObservation() async {
         do {
+            tutorTargetClickTracker.disarm()
             ensureCursorOverlayVisibleForAgentTask()
             voiceState = .processing
 
@@ -14505,6 +14508,11 @@ final class CompanionManager: ObservableObject {
                     displayFrame: targetScreenCapture.displayFrame,
                     label: parseResult.elementLabel
                 )
+                armTutorTargetClickTracking(
+                    at: globalLocation,
+                    displayFrame: targetScreenCapture.displayFrame,
+                    label: parseResult.elementLabel
+                )
                 ClickyAnalytics.trackElementPointed(elementLabel: parseResult.elementLabel)
                 print("Tutor pointing: (\(Int(pointCoordinate.x)), \(Int(pointCoordinate.y)))")
             }
@@ -14530,6 +14538,30 @@ final class CompanionManager: ObservableObject {
 
         voiceState = .idle
         scheduleTransientHideIfNeeded()
+    }
+
+    private func armTutorTargetClickTracking(at point: CGPoint, displayFrame: CGRect?, label: String?) {
+        guard isTutorModeEnabled else { return }
+        tutorTargetClickTracker.arm(targetPoint: point, targetRect: nil) { [weak self] clickPoint in
+            guard let self else { return }
+            self.lastVoiceInteractionCompletedAt = .distantPast
+            self.userActivityIdleDetector.recordTutorStepCompleted()
+            OpenClickyMessageLogStore.shared.append(
+                lane: "voice",
+                direction: "incoming",
+                event: "tutor.target_clicked",
+                fields: [
+                    "label": label ?? "",
+                    "targetX": Int(point.x),
+                    "targetY": Int(point.y),
+                    "clickX": Int(clickPoint.x),
+                    "clickY": Int(clickPoint.y),
+                    "displayFrame": displayFrame.map { frame in
+                        "\(Int(frame.origin.x)),\(Int(frame.origin.y)),\(Int(frame.width)),\(Int(frame.height))"
+                    } ?? ""
+                ]
+            )
+        }
     }
 
     private func tutorTargetScreenCapture(from screenCaptures: [CompanionScreenCapture], screenNumber: Int?) -> CompanionScreenCapture? {
@@ -16085,6 +16117,12 @@ private final class UserActivityIdleDetector: ObservableObject {
         isUserIdle = false
     }
 
+    func recordTutorStepCompleted() {
+        hasUserActedSinceLastObservation = true
+        lastUserInputTimestamp = Date()
+        isUserIdle = false
+    }
+
     private func recordUserActivity() {
         lastUserInputTimestamp = Date()
         hasUserActedSinceLastObservation = true
@@ -16097,6 +16135,74 @@ private final class UserActivityIdleDetector: ObservableObject {
         if isNowIdle != isUserIdle {
             isUserIdle = isNowIdle
         }
+    }
+}
+
+@MainActor
+final class TutorTargetClickTracker {
+    private static let pointOnlyHitToleranceInScreenPoints: CGFloat = 44
+    private static let rectInflationInScreenPoints: CGFloat = 8
+
+    private var targetPoint: CGPoint?
+    private var targetRect: CGRect?
+    private var globalEventMonitor: Any?
+    private var onTargetClicked: ((CGPoint) -> Void)?
+
+    func arm(targetPoint: CGPoint, targetRect: CGRect?, onTargetClicked: @escaping (CGPoint) -> Void) {
+        self.targetPoint = targetPoint
+        self.targetRect = targetRect
+        self.onTargetClicked = onTargetClicked
+        startEventMonitorIfNeeded()
+    }
+
+    func disarm() {
+        targetPoint = nil
+        targetRect = nil
+        onTargetClicked = nil
+        if let globalEventMonitor {
+            NSEvent.removeMonitor(globalEventMonitor)
+            self.globalEventMonitor = nil
+        }
+    }
+
+    private func startEventMonitorIfNeeded() {
+        guard globalEventMonitor == nil else { return }
+        globalEventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown]) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.handleClick(at: NSEvent.mouseLocation)
+            }
+        }
+    }
+
+    private func handleClick(at clickPoint: CGPoint) {
+        guard Self.isHit(
+            clickPoint: clickPoint,
+            targetPoint: targetPoint,
+            targetRect: targetRect
+        ) else { return }
+
+        let callback = onTargetClicked
+        disarm()
+        callback?(clickPoint)
+    }
+
+    static func isHit(
+        clickPoint: CGPoint,
+        targetPoint: CGPoint?,
+        targetRect: CGRect?,
+        pointTolerance: CGFloat = pointOnlyHitToleranceInScreenPoints,
+        rectInflation: CGFloat = rectInflationInScreenPoints
+    ) -> Bool {
+        if let targetRect {
+            let inflatedRect = targetRect.insetBy(dx: -rectInflation, dy: -rectInflation)
+            if inflatedRect.contains(clickPoint) {
+                return true
+            }
+        }
+
+        guard let targetPoint else { return false }
+        let distance = hypot(clickPoint.x - targetPoint.x, clickPoint.y - targetPoint.y)
+        return distance <= pointTolerance
     }
 }
 
