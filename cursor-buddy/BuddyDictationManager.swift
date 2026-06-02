@@ -804,17 +804,17 @@ final class BuddyDictationManager: NSObject, ObservableObject {
         if let source = buffer.floatChannelData,
            let destination = copiedBuffer.floatChannelData {
             for channel in 0..<channelCount {
-                destination[channel].assign(from: source[channel], count: frameCount)
+                destination[channel].update(from: source[channel], count: frameCount)
             }
         } else if let source = buffer.int16ChannelData,
                   let destination = copiedBuffer.int16ChannelData {
             for channel in 0..<channelCount {
-                destination[channel].assign(from: source[channel], count: frameCount)
+                destination[channel].update(from: source[channel], count: frameCount)
             }
         } else if let source = buffer.int32ChannelData,
                   let destination = copiedBuffer.int32ChannelData {
             for channel in 0..<channelCount {
-                destination[channel].assign(from: source[channel], count: frameCount)
+                destination[channel].update(from: source[channel], count: frameCount)
             }
         }
 
