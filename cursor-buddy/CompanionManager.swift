@@ -4650,7 +4650,7 @@ final class CompanionManager: ObservableObject {
             instruction: instruction,
             acknowledgement: "i’ll handle the background part too.",
             route: "agent.hybrid_start",
-            speakAcknowledgement: false,
+            speakAcknowledgement: true,
             interruptVoiceResponse: false,
             voiceContextUserTranscript: transcript
         )
@@ -10456,12 +10456,14 @@ final class CompanionManager: ObservableObject {
         guard !isSensitiveOrDestructiveAgentTaskRequest(normalized) else { return nil }
 
         let hasAction = containsAgentWorkAction(normalized)
+        let hasCodingImplementationCue = containsCodingImplementationCue(candidate)
         let hasToolContext = isLikelyAgentToolWorkInstruction(candidate)
             || hasAgentWorkVerbAndArtifact(candidate)
             || containsDurableWorkTarget(normalized)
+            || hasCodingImplementationCue
         let asksForFreshInfo = containsFreshResearchRequest(normalized)
 
-        guard (hasAction && hasToolContext) || asksForFreshInfo else { return nil }
+        guard (hasAction && hasToolContext) || hasCodingImplementationCue || asksForFreshInfo else { return nil }
         guard !isLikelyDirectLocalOnlyRequest(candidate) else { return nil }
 
         return cleanedAgentTaskInstruction(candidate)
@@ -10718,7 +10720,8 @@ final class CompanionManager: ObservableObject {
 
         let explicitExecutionPattern = #"\b(?:agent|start\s+(?:an?\s+)?agent|spin\s+up|get\s+(?:an?\s+)?agent|implement|patch|change\s+the\s+code|edit\s+the\s+file|write\s+the\s+file|make\s+the\s+change|do\s+the\s+change|fix\s+it\s+now)\b"#
         let naturalWorkPattern = #"\b(?:make\s+sure|ensure|verify|validate|look\s+into|sort\s+out|deal\s+with|take\s+care\s+of|get\s+(?:this|that|it|.+?)\s+working|wire\s+(?:up|in)|hook\s+(?:up|in)|diagnose|investigate)\b"#
-        return normalized.range(of: explicitExecutionPattern, options: .regularExpression) == nil
+        return !containsCodingImplementationCue(transcript)
+            && normalized.range(of: explicitExecutionPattern, options: .regularExpression) == nil
             && normalized.range(of: naturalWorkPattern, options: .regularExpression) == nil
     }
 
@@ -10765,6 +10768,27 @@ final class CompanionManager: ObservableObject {
     private static func containsDurableWorkTarget(_ normalized: String) -> Bool {
         let targetPattern = #"\b(?:openclicky|clicky|github|repo|repository|codebase|project|app|settings|preference|preferences|log|logs|memory|skill|skills|desktop|download|downloads|document|documents|folder|folders|file|files|code|diff|git|branch|pull\s+request|pr|issue|issues|bug|test|tests|build|swift|xcode|email|gmail|calendar|spreadsheet|sheet|doc|slides|voice|realtime|computer\s+use|tool|tools|tooling|model|models|routing|route|background|agent\s+mode)\b"#
         return normalized.range(of: targetPattern, options: .regularExpression) != nil
+    }
+
+    private static func containsCodingImplementationCue(_ transcript: String) -> Bool {
+        let normalized = normalizedSpokenCommandText(transcript)
+        guard wordCount(in: normalized) >= 3 else { return false }
+
+        let conceptualQuestionPattern = #"^(?:what|why|how\s+(?:do|does|would|should)|can\s+you\s+explain|explain|tell\s+me\s+about)\b"#
+        if normalized.range(of: conceptualQuestionPattern, options: .regularExpression) != nil,
+           normalized.range(of: #"\b(?:make\s+the\s+change|do\s+the\s+change|change\s+the\s+code|edit\s+the\s+file|patch|implement|apply|fix\s+it\s+now)\b"#, options: .regularExpression) == nil {
+            return false
+        }
+
+        let implementationVerbPattern = #"\b(?:fix|patch|implement|change|update|edit|modify|add|remove|wire|hook|route|make|build|repair|polish|improve)\b"#
+        let codeTargetPattern = #"\b(?:openclicky|clicky|code|codebase|repo|repository|swift|xcode|companionmanager|app|routing|route|voice\s+(?:path|lane|route)|agent\s+(?:mode|routing|route)|computer\s+use)\b"#
+        let changeRequestPattern = #"\b(?:asking\s+for|ask\s+for|requested?|need|needs|want|wants)\b.{0,80}\b(?:changes?|fixes?|code\s+fixes?|code\s+changes?)\b"#
+
+        let hasImplementationVerb = normalized.range(of: implementationVerbPattern, options: .regularExpression) != nil
+        let hasCodeTarget = normalized.range(of: codeTargetPattern, options: .regularExpression) != nil
+        let hasChangeRequest = normalized.range(of: changeRequestPattern, options: .regularExpression) != nil
+
+        return (hasImplementationVerb && hasCodeTarget) || hasChangeRequest
     }
 
     private static func containsFreshResearchRequest(_ normalized: String) -> Bool {
@@ -15290,6 +15314,7 @@ final class CompanionManager: ObservableObject {
         case .openAIRealtime:
             let text = try await openAIRealtimeSpeechClient.analyzeImageResponse(
                 images: [image],
+                modelID: selectedPointingModel.id,
                 systemPrompt: systemPrompt,
                 userPrompt: userPrompt,
                 onTextChunk: onTextChunk
@@ -15344,6 +15369,11 @@ final class CompanionManager: ObservableObject {
         }
 
         let pointingModel = OpenClickyModelCatalog.computerUseModel(withID: selectedComputerUseModelID)
+        if pointingModel.provider == .openAI,
+           OpenClickyModelCatalog.isSpeechModelID(pointingModel.id) {
+            return .openAIRealtime
+        }
+
         switch pointingModel.provider {
         case .anthropic:
             return .anthropicAPI

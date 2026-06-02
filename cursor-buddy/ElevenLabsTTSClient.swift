@@ -2521,6 +2521,7 @@ final class OpenAIRealtimeSpeechClient: OpenClickyTTSClient {
 
     func analyzeImageResponse(
         images: [(data: Data, label: String)],
+        modelID: String? = nil,
         systemPrompt: String,
         userPrompt: String,
         onTextChunk: @MainActor @Sendable @escaping (String) -> Void
@@ -2535,7 +2536,8 @@ final class OpenAIRealtimeSpeechClient: OpenClickyTTSClient {
         guard var components = URLComponents(string: "wss://api.openai.com/v1/realtime") else {
             throw NSError(domain: "OpenAIRealtimeSpeechClient", code: -1, userInfo: [NSLocalizedDescriptionKey: "OpenAI Realtime WebSocket URL is invalid."])
         }
-        components.queryItems = [URLQueryItem(name: "model", value: model)]
+        let requestModel = modelID?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? modelID! : model
+        components.queryItems = [URLQueryItem(name: "model", value: requestModel)]
         guard let url = components.url else {
             throw NSError(domain: "OpenAIRealtimeSpeechClient", code: -1, userInfo: [NSLocalizedDescriptionKey: "OpenAI Realtime WebSocket URL could not be created."])
         }
@@ -2555,7 +2557,7 @@ final class OpenAIRealtimeSpeechClient: OpenClickyTTSClient {
             direction: "outgoing",
             event: "openai_realtime.image_analysis.request",
             fields: [
-                "model": model,
+                "model": requestModel,
                 "imageCount": images.count,
                 "transport": "realtime_websocket",
                 "streamingMethod": "conversation.item.create + response.output_text.delta"
@@ -2567,7 +2569,7 @@ final class OpenAIRealtimeSpeechClient: OpenClickyTTSClient {
             "type": "session.update",
             "session": [
                 "type": "realtime",
-                "model": model,
+                "model": requestModel,
                 "output_modalities": ["text"]
             ]
         ], to: webSocket)
@@ -2655,7 +2657,7 @@ final class OpenAIRealtimeSpeechClient: OpenClickyTTSClient {
             direction: "incoming",
             event: "openai_realtime.image_analysis.response",
             fields: [
-                "model": model,
+                "model": requestModel,
                 "responseLength": trimmed.count,
                 "transport": "realtime_websocket"
             ]

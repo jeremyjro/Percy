@@ -220,6 +220,24 @@ struct CodexAgentModeTests {
         #expect(instruction.lowercased() == "add a volume slider to the app")
     }
 
+    @MainActor @Test func implicitAgentRoutingTreatsOpenClickyCodeFixRequestsAsAgentTasks() throws {
+        let maybeInstruction = CompanionManager.implicitAgentTaskInstruction(
+            from: "I think we need to fix OpenClicky so coding tasks always go to Agent Mode."
+        )
+        #expect(maybeInstruction != nil)
+        guard let instruction = maybeInstruction else { return }
+
+        #expect(instruction.lowercased() == "i think we need to fix openclicky so coding tasks always go to agent mode")
+    }
+
+    @MainActor @Test func implicitAgentRoutingKeepsConceptualCodingQuestionsInVoiceRoute() throws {
+        let maybeInstruction = CompanionManager.implicitAgentTaskInstruction(
+            from: "How would I fix this Swift error conceptually?"
+        )
+
+        #expect(maybeInstruction == nil)
+    }
+
     @MainActor @Test func implicitAgentRoutingKeepsInstantScreenQuestionsInVoiceRoute() throws {
         let lookAtThatInstruction = CompanionManager.implicitAgentTaskInstruction(from: "Look at that and tell me what you think.")
         let describeScreenInstruction = CompanionManager.implicitAgentTaskInstruction(from: "Have a look at my screen and describe what's visible.")

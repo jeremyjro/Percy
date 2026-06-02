@@ -68,6 +68,29 @@ struct OpenClickyComputerUseTests {
         #expect(window.captureLabel == "CUA Swift focused window (Xcode - ContentView.swift)")
     }
 
+    @Test func nativeComputerUseCaptureNoteExplainsDownsampleMapping() throws {
+        let window = OpenClickyComputerUseWindowInfo(
+            id: 77,
+            pid: 2468,
+            owner: "Xcode",
+            name: "ContentView.swift",
+            bounds: OpenClickyComputerUseWindowBounds(x: 12.5, y: 40.0, width: 1606.0, height: 1089.0),
+            zIndex: 20,
+            isOnScreen: true,
+            layer: 0
+        )
+        let capture = OpenClickyComputerUseWindowCapture(
+            imageData: Data(),
+            window: window,
+            screenshotWidthInPixels: 1280,
+            screenshotHeightInPixels: 867
+        )
+
+        #expect(capture.agentContextNote.contains("Screenshot is a proportional downsample of the focused window, not full native display pixels"))
+        #expect(capture.agentContextNote.contains("xScale 1.2547"))
+        #expect(capture.agentContextNote.contains("yScale 1.2550"))
+    }
+
     @Test func realtimeCompositeAppCommandIsNotReducedToOpenApp() throws {
         #expect(
             CompanionManager.testLocalAppOpenTarget(
@@ -185,6 +208,17 @@ struct OpenClickyComputerUseTests {
             CompanionManager.testComputerUsePointingResolver(
                 selectedVoiceModelID: "gpt-realtime-2",
                 selectedComputerUseModelID: "gpt-5.5"
+            ) == "openai_realtime"
+        )
+    }
+
+    @Test func realtimeComputerUseModelUsesRealtimeAPIInsteadOfCodex() throws {
+        let model = OpenClickyModelCatalog.computerUseModel(withID: "gpt-realtime-2")
+        #expect(model.provider == .openAI)
+        #expect(
+            CompanionManager.testComputerUsePointingResolver(
+                selectedVoiceModelID: "gpt-5.5",
+                selectedComputerUseModelID: "gpt-realtime-2"
             ) == "openai_realtime"
         )
     }

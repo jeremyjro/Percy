@@ -135,15 +135,43 @@ final class OpenClickyBackgroundComputerUseController: ObservableObject {
     private let installedAppURL: URL
     private let manifestURL: URL
 
+    nonisolated private static let developmentSourceRootURL = URL(
+        fileURLWithPath: "/Users/jkneen/Documents/GitHub/background-computer-use",
+        isDirectory: true
+    )
+
+    nonisolated private static func bundledRuntimeRootURL() -> URL? {
+        Bundle.main.resourceURL?
+            .appendingPathComponent("BackgroundComputerUseRuntime", isDirectory: true)
+    }
+
+    nonisolated private static func bundledAppURL(in runtimeRootURL: URL) -> URL {
+        runtimeRootURL.appendingPathComponent("BackgroundComputerUse.app", isDirectory: true)
+    }
+
+    nonisolated private static func installedAppURL(fileManager: FileManager) -> URL {
+        fileManager.homeDirectoryForCurrentUser
+            .appendingPathComponent("Applications", isDirectory: true)
+            .appendingPathComponent("BackgroundComputerUse.app", isDirectory: true)
+    }
+
     init(
-        sourceRootURL: URL = URL(fileURLWithPath: "/Users/jkneen/Documents/GitHub/background-computer-use", isDirectory: true),
+        sourceRootURL requestedSourceRootURL: URL = OpenClickyBackgroundComputerUseController.developmentSourceRootURL,
         fileManager: FileManager = .default
     ) {
         self.fileManager = fileManager
-        self.sourceRootURL = sourceRootURL
-        self.installedAppURL = fileManager.homeDirectoryForCurrentUser
-            .appendingPathComponent("Applications", isDirectory: true)
-            .appendingPathComponent("BackgroundComputerUse.app", isDirectory: true)
+
+        let bundledRuntimeRootURL = Self.bundledRuntimeRootURL()
+        let bundledAppURL = bundledRuntimeRootURL.map(Self.bundledAppURL(in:))
+        let shouldUseBundledRuntime = bundledAppURL.map { fileManager.fileExists(atPath: $0.path) } ?? false
+        let resolvedSourceRootURL = shouldUseBundledRuntime
+            ? bundledRuntimeRootURL ?? requestedSourceRootURL
+            : requestedSourceRootURL
+
+        self.sourceRootURL = resolvedSourceRootURL
+        self.installedAppURL = shouldUseBundledRuntime
+            ? bundledAppURL ?? Self.installedAppURL(fileManager: fileManager)
+            : Self.installedAppURL(fileManager: fileManager)
         self.manifestURL = fileManager.temporaryDirectory
             .appendingPathComponent("background-computer-use", isDirectory: true)
             .appendingPathComponent("runtime-manifest.json", isDirectory: false)
@@ -189,6 +217,7 @@ final class OpenClickyBackgroundComputerUseController: ObservableObject {
             let startScriptURL = sourceRootURL
                 .appendingPathComponent("script", isDirectory: true)
                 .appendingPathComponent("start.sh", isDirectory: false)
+            let bundledAppURL = Self.bundledAppURL(in: sourceRootURL)
             let logDirectoryURL = fileManager.temporaryDirectory
                 .appendingPathComponent("background-computer-use", isDirectory: true)
             let launchLogURL = logDirectoryURL
@@ -203,9 +232,15 @@ final class OpenClickyBackgroundComputerUseController: ObservableObject {
                 }
 
                 let process = Process()
-                process.executableURL = URL(fileURLWithPath: "/bin/bash")
-                process.arguments = [startScriptURL.path]
-                process.currentDirectoryURL = sourceRootURL
+                if fileManager.fileExists(atPath: bundledAppURL.path) {
+                    process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+                    process.arguments = [bundledAppURL.path]
+                    process.currentDirectoryURL = sourceRootURL
+                } else {
+                    process.executableURL = URL(fileURLWithPath: "/bin/bash")
+                    process.arguments = [startScriptURL.path]
+                    process.currentDirectoryURL = sourceRootURL
+                }
                 process.standardOutput = logHandle
                 process.standardError = logHandle
                 try process.run()
@@ -213,7 +248,7 @@ final class OpenClickyBackgroundComputerUseController: ObservableObject {
 
                 let launchError = process.terminationStatus == 0
                     ? nil
-                    : "start.sh exited with status \(process.terminationStatus). See \(launchLogURL.path)"
+                    : "BackgroundComputerUse launch exited with status \(process.terminationStatus). See \(launchLogURL.path)"
                 await MainActor.run {
                     self.status = Self.makeStatus(
                         sourceRootURL: sourceRootURL,
@@ -313,7 +348,8 @@ final class OpenClickyBackgroundComputerUseController: ObservableObject {
             bundleIdentifier: target.bundleID,
             source: "background_computer_use_key_press"
         )
-        let chord = (modifiers + [key]).filter { !$0.isEmpty }.joined(separator: "+")
+        let normalizedKey = Self.backgroundPressKeyToken(for: key)
+        let chord = (modifiers + [normalizedKey]).filter { !$0.isEmpty }.joined(separator: "+")
         let request = OpenClickyBackgroundComputerUsePressKeyRequest(
             window: target.windowID,
             key: chord,
@@ -335,6 +371,16 @@ final class OpenClickyBackgroundComputerUseController: ObservableObject {
             summary: response.summary,
             ok: response.ok
         )
+    }
+
+    private static func backgroundPressKeyToken(for key: String) -> String {
+        let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        switch trimmed.lowercased() {
+        case "enter":
+            return "return"
+        default:
+            return trimmed
+        }
     }
 
     func typeText(_ text: String, targetAppName: String? = nil) async throws -> OpenClickyBackgroundComputerUseActionResult {
@@ -478,8 +524,11 @@ final class OpenClickyBackgroundComputerUseController: ObservableObject {
         let startScriptURL = sourceRootURL
             .appendingPathComponent("script", isDirectory: true)
             .appendingPathComponent("start.sh", isDirectory: false)
+        let bundledAppURL = Self.bundledAppURL(in: sourceRootURL)
         let startScriptAvailable = fileManager.fileExists(atPath: startScriptURL.path)
+            || fileManager.fileExists(atPath: bundledAppURL.path)
         let installedAppAvailable = fileManager.fileExists(atPath: installedAppURL.path)
+            || fileManager.fileExists(atPath: bundledAppURL.path)
         let manifestExists = fileManager.fileExists(atPath: manifestURL.path)
         let manifest = manifestExists
             ? try? JSONDecoder().decode(
@@ -930,8 +979,8 @@ enum OpenClickyComputerUseWindowCaptureUtility {
         return OpenClickyComputerUseWindowCapture(
             imageData: imageData,
             window: targetWindow,
-            screenshotWidthInPixels: configuration.width,
-            screenshotHeightInPixels: configuration.height
+            screenshotWidthInPixels: cgImage.width,
+            screenshotHeightInPixels: cgImage.height
         )
     }
 }

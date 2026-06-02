@@ -264,7 +264,13 @@ struct OpenClickyComputerUseWindowCapture: Sendable, Hashable {
     var label: String { window.captureLabel }
 
     var agentContextNote: String {
-        "\(window.agentContextNote) Image dimensions \(screenshotWidthInPixels)x\(screenshotHeightInPixels) pixels."
+        let widthScale = window.bounds.width / Double(max(1, screenshotWidthInPixels))
+        let heightScale = window.bounds.height / Double(max(1, screenshotHeightInPixels))
+        return "\(window.agentContextNote) Image dimensions \(screenshotWidthInPixels)x\(screenshotHeightInPixels) pixels. Screenshot is a proportional downsample of the focused window, not full native display pixels; map screenshot pixel coordinates to window bounds with xScale \(Self.formatScale(widthScale)) and yScale \(Self.formatScale(heightScale))."
+    }
+
+    private static func formatScale(_ value: Double) -> String {
+        String(format: "%.4f", value)
     }
 }
 
@@ -298,7 +304,7 @@ struct OpenClickyBackgroundComputerUseStatus: Sendable, Hashable {
         }
 
         guard startScriptAvailable else {
-            return "Start script missing at \(sourceRootPath)/script/start.sh"
+            return "BackgroundComputerUse launcher missing at \(sourceRootPath)"
         }
 
         guard manifestExists else {
