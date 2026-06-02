@@ -15,6 +15,7 @@ import Foundation
 final class GlobalPushToTalkShortcutMonitor: ObservableObject {
     let shortcutTransitionPublisher = PassthroughSubject<BuddyPushToTalkShortcut.ShortcutTransition, Never>()
     let shiftDoubleTapPublisher = PassthroughSubject<CGPoint, Never>()
+    let escapeKeyPublisher = PassthroughSubject<Void, Never>()
 
     @Published private(set) var isActivationShortcutEnabled = true
 
@@ -23,6 +24,7 @@ final class GlobalPushToTalkShortcutMonitor: ObservableObject {
     private var isShiftCurrentlyPressed = false
     private var isShiftTapStandaloneCandidate = false
     private var lastStandaloneShiftTapDate: Date?
+    private var isEscapeCurrentlyPressed = false
     private let maximumShiftDoubleTapInterval: TimeInterval = 0.42
     /// Mutated exclusively from the CGEvent tap callback, which runs on
     /// `CFRunLoopGetMain()` and therefore always executes on the main thread.
@@ -116,7 +118,7 @@ final class GlobalPushToTalkShortcutMonitor: ObservableObject {
         isActivationShortcutEnabled = enabled
         if !enabled && isShortcutCurrentlyPressed {
             isShortcutCurrentlyPressed = false
-            shortcutTransitionPublisher.send(.released)
+            publishShortcutTransition(.released)
         }
     }
 
@@ -131,12 +133,14 @@ final class GlobalPushToTalkShortcutMonitor: ObservableObject {
             return Unmanaged.passUnretained(event)
         }
 
+        let eventKeyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
+        handleEscapeKeyIfNeeded(eventType: eventType, keyCode: eventKeyCode)
+
         guard isActivationShortcutEnabled else {
             handleStandaloneShiftTapIfNeeded(eventType: eventType, event: event)
             return Unmanaged.passUnretained(event)
         }
 
-        let eventKeyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
         let shortcutTransition = BuddyPushToTalkShortcut.shortcutTransition(
             for: eventType,
             keyCode: eventKeyCode,
@@ -149,13 +153,46 @@ final class GlobalPushToTalkShortcutMonitor: ObservableObject {
             handleStandaloneShiftTapIfNeeded(eventType: eventType, event: event)
         case .pressed:
             isShortcutCurrentlyPressed = true
-            shortcutTransitionPublisher.send(.pressed)
+            publishShortcutTransition(.pressed)
         case .released:
             isShortcutCurrentlyPressed = false
-            shortcutTransitionPublisher.send(.released)
+            publishShortcutTransition(.released)
         }
 
         return Unmanaged.passUnretained(event)
+    }
+
+    private func handleEscapeKeyIfNeeded(eventType: CGEventType, keyCode: UInt16) {
+        let escapeKeyCode: UInt16 = 53
+        guard keyCode == escapeKeyCode else { return }
+
+        switch eventType {
+        case .keyDown where !isEscapeCurrentlyPressed:
+            isEscapeCurrentlyPressed = true
+            publishEscapeKeyPress()
+        case .keyUp:
+            isEscapeCurrentlyPressed = false
+        default:
+            break
+        }
+    }
+
+    private func publishShortcutTransition(_ transition: BuddyPushToTalkShortcut.ShortcutTransition) {
+        DispatchQueue.main.async { [shortcutTransitionPublisher] in
+            shortcutTransitionPublisher.send(transition)
+        }
+    }
+
+    private func publishShiftDoubleTap(at point: CGPoint) {
+        DispatchQueue.main.async { [shiftDoubleTapPublisher] in
+            shiftDoubleTapPublisher.send(point)
+        }
+    }
+
+    private func publishEscapeKeyPress() {
+        DispatchQueue.main.async { [escapeKeyPublisher] in
+            escapeKeyPublisher.send(())
+        }
     }
 
     private func handleStandaloneShiftTapIfNeeded(eventType: CGEventType, event: CGEvent) {
@@ -195,7 +232,7 @@ final class GlobalPushToTalkShortcutMonitor: ObservableObject {
             if let lastStandaloneShiftTapDate,
                now.timeIntervalSince(lastStandaloneShiftTapDate) <= maximumShiftDoubleTapInterval {
                 self.lastStandaloneShiftTapDate = nil
-                shiftDoubleTapPublisher.send(NSEvent.mouseLocation)
+                publishShiftDoubleTap(at: NSEvent.mouseLocation)
             } else {
                 lastStandaloneShiftTapDate = now
             }

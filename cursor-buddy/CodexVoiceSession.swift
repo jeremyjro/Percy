@@ -318,6 +318,7 @@ final class CodexVoiceSession {
 
     private func ensureCodexAuthentication() async throws {
         guard homeManager.modelProviderID == ClickyCodexConfigTemplate.defaultModelProviderID else { return }
+        guard !codexConfigPrefersAPIKeyAuth() else { return }
 
         let accountRead = try await processManager.sendRequest(method: "account/read", params: [
             "refreshToken": false
@@ -353,6 +354,12 @@ final class CodexVoiceSession {
             fields: logFields()
         )
         throw CodexRPCError(message: "OpenClicky found no Codex ChatGPT login. Finish the Codex sign-in that just opened, then try again.")
+    }
+
+    private func codexConfigPrefersAPIKeyAuth() -> Bool {
+        let configFile = homeManager.codexHomeDirectory.appendingPathComponent("config.toml", isDirectory: false)
+        guard let configText = try? String(contentsOf: configFile, encoding: .utf8) else { return false }
+        return configText.contains("preferred_auth_method = \"apikey\"")
     }
 
     private func handleNotification(_ notification: [String: Any]) {

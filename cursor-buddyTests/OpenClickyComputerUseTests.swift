@@ -124,20 +124,23 @@ struct OpenClickyComputerUseTests {
         #expect(CompanionManager.testSpotifyPlaybackQuery(from: "Spotify and play Back in Black.") == "Back in Black")
         #expect(CompanionManager.testStandaloneSpotifyPlaybackQuery(from: "Can you play Back in Black?") == "Back in Black")
         #expect(CompanionManager.testStandaloneSpotifyPlaybackQuery(from: "play the video") == nil)
+        #expect(CompanionManager.testStandaloneSpotifyPlaybackQuery(from: "play anything in Spotify") == nil)
+        #expect(CompanionManager.testSpotifyPlaybackControlAction(from: "play anything in Spotify") == "play")
+        #expect(CompanionManager.testSpotifyPlaybackControlAction(from: "play music") == "play")
     }
 
     @Test func spotifySearchPlayRouteStaysOnComputerUseExecution() throws {
         let nativeMethods = CompanionManager.testSpotifySearchPlayExecutionMethods(for: .nativeSwift)
-        #expect(nativeMethods.started == "NSWorkspace.open_spotify_uri + OpenClickyNativeComputerUseController.pressKey")
-        #expect(nativeMethods.completed == "NSWorkspace.open_spotify_uri + OpenClickyNativeComputerUseController.pressKey")
-        #expect(!nativeMethods.completed.localizedCaseInsensitiveContains("AppleScript"))
-        #expect(!nativeMethods.completed.localizedCaseInsensitiveContains("verification"))
+        #expect(nativeMethods.started == "NSWorkspace.open_spotify_uri + OpenClickyNativeComputerUseController.pressKey + AppleScript playback verification")
+        #expect(nativeMethods.completed == "NSWorkspace.open_spotify_uri + OpenClickyNativeComputerUseController.pressKey + AppleScript playback verification")
+        #expect(nativeMethods.completed.localizedCaseInsensitiveContains("AppleScript"))
+        #expect(nativeMethods.completed.localizedCaseInsensitiveContains("verification"))
 
         let backgroundMethods = CompanionManager.testSpotifySearchPlayExecutionMethods(for: .backgroundComputerUse)
-        #expect(backgroundMethods.started == "NSWorkspace.open_spotify_uri + BackgroundComputerUse /v1/press_key")
-        #expect(backgroundMethods.completed == "NSWorkspace.open_spotify_uri + BackgroundComputerUse /v1/press_key")
-        #expect(!backgroundMethods.completed.localizedCaseInsensitiveContains("AppleScript"))
-        #expect(!backgroundMethods.completed.localizedCaseInsensitiveContains("verification"))
+        #expect(backgroundMethods.started == "NSWorkspace.open_spotify_uri + BackgroundComputerUse /v1/press_key + AppleScript playback verification")
+        #expect(backgroundMethods.completed == "NSWorkspace.open_spotify_uri + BackgroundComputerUse /v1/press_key + AppleScript playback verification")
+        #expect(backgroundMethods.completed.localizedCaseInsensitiveContains("AppleScript"))
+        #expect(backgroundMethods.completed.localizedCaseInsensitiveContains("verification"))
     }
 
     @Test func voiceAgentStartFingerprintNormalizesDuplicateRealtimeRoutes() throws {

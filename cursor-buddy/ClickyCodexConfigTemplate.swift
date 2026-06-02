@@ -13,6 +13,7 @@ struct ClickyCodexConfigTemplate: Equatable {
     var includeOpenAIDeveloperDocsMCP: Bool
     var includeComposioConnectMCP: Bool
     var cuaDriverMCPCommand: String?
+    var preferAPIKeyAuthForDefaultOpenAI: Bool
 
     init(
         model: String = OpenClickyModelCatalog.defaultCodexActionsModelID,
@@ -23,7 +24,8 @@ struct ClickyCodexConfigTemplate: Equatable {
         learnedSkillsDirectoryName: String = "OpenClickyLearnedSkills",
         includeOpenAIDeveloperDocsMCP: Bool = false,
         includeComposioConnectMCP: Bool = true,
-        cuaDriverMCPCommand: String? = nil
+        cuaDriverMCPCommand: String? = nil,
+        preferAPIKeyAuthForDefaultOpenAI: Bool = false
     ) {
         self.model = model
         self.reasoningEffort = reasoningEffort
@@ -34,6 +36,7 @@ struct ClickyCodexConfigTemplate: Equatable {
         self.includeOpenAIDeveloperDocsMCP = includeOpenAIDeveloperDocsMCP
         self.includeComposioConnectMCP = includeComposioConnectMCP
         self.cuaDriverMCPCommand = cuaDriverMCPCommand
+        self.preferAPIKeyAuthForDefaultOpenAI = preferAPIKeyAuthForDefaultOpenAI
     }
 
     var openAICompatibleEndpoint: URL {
@@ -130,7 +133,8 @@ struct ClickyCodexConfigTemplate: Equatable {
     }
 
     private var preferredAuthMethod: String {
-        ClickyCodexBackend.isDefaultOpenAIBaseURL(workerBaseURL) ? "chatgpt" : "apikey"
+        guard ClickyCodexBackend.isDefaultOpenAIBaseURL(workerBaseURL) else { return "apikey" }
+        return preferAPIKeyAuthForDefaultOpenAI ? "apikey" : "chatgpt"
     }
 
     private func normalizedOptionalString(_ value: String?) -> String? {

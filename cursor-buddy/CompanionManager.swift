@@ -408,6 +408,7 @@ final class CompanionManager: ObservableObject {
     @Published private(set) var hasMicrophonePermission = false
     @Published private(set) var hasScreenContentPermission = false
     @Published private(set) var hasFullDiskAccessPermission = false
+    @Published private(set) var hasSystemEventsAutomationPermission = false
     @Published private(set) var hasCameraPermission = false
 
     /// Screen location (global AppKit coords) of a detected UI element the
@@ -1280,6 +1281,7 @@ final class CompanionManager: ObservableObject {
 
     private var shortcutTransitionCancellable: AnyCancellable?
     private var shiftDoubleTapCancellable: AnyCancellable?
+    private var escapeKeyCancellable: AnyCancellable?
     private var voiceStateCancellable: AnyCancellable?
     private var audioPowerCancellable: AnyCancellable?
     private var externalControlBridgeServer: OpenClickyExternalControlBridgeServer?
@@ -1747,6 +1749,44 @@ final class CompanionManager: ObservableObject {
                     self.speakShortSystemResponse(Self.nativeAutomationErrorMessage(appName: "Reminders", result: result))
                 }
             }
+        }
+    }
+
+    func requestSystemEventsAutomationPermission() {
+        OpenClickyMessageLogStore.shared.append(
+            lane: "computer-use",
+            direction: "outgoing",
+            event: "native_cua.automation_probe.started",
+            fields: [
+                "target": "System Events"
+            ]
+        )
+
+        let isGranted = OpenClickyMacPrivacyPermissionProbe.hasSystemEventsAutomationPermission(prompt: true)
+        hasSystemEventsAutomationPermission = isGranted
+
+        if isGranted {
+            OpenClickyMessageLogStore.shared.append(
+                lane: "computer-use",
+                direction: "outgoing",
+                event: "native_cua.automation_probe.ready",
+                fields: [
+                    "target": "System Events"
+                ]
+            )
+            speakShortSystemResponse("System Events automation is ready.")
+        } else {
+            OpenClickyMessageLogStore.shared.append(
+                lane: "computer-use",
+                direction: "error",
+                event: "native_cua.automation_probe.blocked",
+                fields: [
+                    "target": "System Events",
+                    "error": "Automation permission is missing or denied for com.apple.systemevents"
+                ]
+            )
+            openAutomationSettings()
+            speakShortSystemResponse("System Events automation needs approval in Privacy & Security, Automation.")
         }
     }
 
@@ -2533,6 +2573,8 @@ final class CompanionManager: ObservableObject {
         agentProgressStageCancellables.removeAll()
         agentTitleCancellables.removeAll()
         shortcutTransitionCancellable?.cancel()
+        shiftDoubleTapCancellable?.cancel()
+        escapeKeyCancellable?.cancel()
         stopTutorIdleObservation()
         voiceStateCancellable?.cancel()
         audioPowerCancellable?.cancel()
@@ -2546,6 +2588,7 @@ final class CompanionManager: ObservableObject {
         let previouslyHadMicrophone = hasMicrophonePermission
         let previouslyHadCamera = hasCameraPermission
         let previouslyHadFullDiskAccess = hasFullDiskAccessPermission
+        let previouslyHadSystemEventsAutomation = hasSystemEventsAutomationPermission
         let previouslyHadAll = allPermissionsGranted
 
         let currentlyHasAccessibility = WindowPositionManager.hasAccessibilityPermission()
@@ -2571,14 +2614,16 @@ final class CompanionManager: ObservableObject {
         let persistedScreenContentPermission = UserDefaults.standard.bool(forKey: "hasScreenContentPermission")
         hasScreenContentPermission = hasScreenRecordingPermission && persistedScreenContentPermission
         hasFullDiskAccessPermission = OpenClickyMacPrivacyPermissionProbe.hasLikelyFullDiskAccess()
+        hasSystemEventsAutomationPermission = OpenClickyMacPrivacyPermissionProbe.hasSystemEventsAutomationPermission(prompt: false)
 
         // Debug: log permission state on changes
         if previouslyHadAccessibility != hasAccessibilityPermission
             || previouslyHadScreenRecording != hasScreenRecordingPermission
             || previouslyHadMicrophone != hasMicrophonePermission
             || previouslyHadCamera != hasCameraPermission
-            || previouslyHadFullDiskAccess != hasFullDiskAccessPermission {
-            print("Permissions — accessibility: \(hasAccessibilityPermission), screen: \(hasScreenRecordingPermission), mic: \(hasMicrophonePermission), camera: \(hasCameraPermission), screenContent: \(hasScreenContentPermission), fullDiskAccess: \(hasFullDiskAccessPermission)")
+            || previouslyHadFullDiskAccess != hasFullDiskAccessPermission
+            || previouslyHadSystemEventsAutomation != hasSystemEventsAutomationPermission {
+            print("Permissions — accessibility: \(hasAccessibilityPermission), screen: \(hasScreenRecordingPermission), mic: \(hasMicrophonePermission), camera: \(hasCameraPermission), screenContent: \(hasScreenContentPermission), fullDiskAccess: \(hasFullDiskAccessPermission), systemEventsAutomation: \(hasSystemEventsAutomationPermission)")
         }
 
         // Track individual permission grants as they happen
@@ -2596,6 +2641,9 @@ final class CompanionManager: ObservableObject {
         }
         if !previouslyHadFullDiskAccess && hasFullDiskAccessPermission {
             ClickyAnalytics.trackPermissionGranted(permission: "full_disk_access")
+        }
+        if !previouslyHadSystemEventsAutomation && hasSystemEventsAutomationPermission {
+            ClickyAnalytics.trackPermissionGranted(permission: "system_events_automation")
         }
 
         if !previouslyHadAll && allPermissionsGranted {
@@ -2824,6 +2872,13 @@ final class CompanionManager: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.showMainOpenClickyPanelFromShortcut()
+            }
+
+        escapeKeyCancellable = globalPushToTalkShortcutMonitor
+            .escapeKeyPublisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in
+                self?.handleEscapeKeyPressed()
             }
     }
 
@@ -3477,6 +3532,31 @@ final class CompanionManager: ObservableObject {
         }
 
         return fields
+    }
+
+    private func handleEscapeKeyPressed() {
+        let isVoiceActive = voiceTTSClient.isPlaying
+            || openAIRealtimeSpeechClient.isPlaying
+            || deepgramVoiceAgentClient.isPlaying
+            || voiceState == .responding
+            || voiceState == .processing
+            || currentResponseTask != nil
+            || realtimeBidirectionalVoiceTask != nil
+
+        guard isVoiceActive else { return }
+
+        OpenClickyMessageLogStore.shared.append(
+            lane: "voice",
+            direction: "incoming",
+            event: "voice.escape_stop_requested",
+            fields: [
+                "voiceState": voiceState.rawValue,
+                "ttsPlaying": voiceTTSClient.isPlaying,
+                "openAIRealtimePlaying": openAIRealtimeSpeechClient.isPlaying,
+                "deepgramVoiceAgentPlaying": deepgramVoiceAgentClient.isPlaying
+            ]
+        )
+        interruptCurrentVoiceResponse()
     }
 
     private func handleShortcutTransition(_ transition: BuddyPushToTalkShortcut.ShortcutTransition) {
@@ -5103,6 +5183,53 @@ final class CompanionManager: ObservableObject {
                     appName: "Spotify",
                     backend: backend
                 )
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                let verification = await Task.detached(priority: .userInitiated) {
+                    OpenClickyLocalAutomationRunner.runAppleScript("""
+                    tell application "Spotify"
+                        return player state as string
+                    end tell
+                    """)
+                }.value
+                let playerState = verification.output
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .lowercased()
+                let verificationError = verification.errorOutput
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                guard verification.terminationStatus == 0, playerState == "playing" else {
+                    let errorText = verification.terminationStatus == 0
+                        ? "Spotify stayed \(playerState.isEmpty ? "unknown" : playerState) after search selection."
+                        : (verificationError.isEmpty ? "Spotify playback verification failed." : verificationError)
+                    speakShortSystemResponse("i opened Spotify search, but it didn't start playing.")
+                    OpenClickyMessageLogStore.shared.append(
+                        lane: "computer-use",
+                        direction: "error",
+                        event: "\(backend.executorID).spotify_search_play_not_playing",
+                        fields: [
+                            "executor": backend.executorID,
+                            "executionMethod": Self.spotifySearchPlayExecutionMethod(for: backend),
+                            "appName": request.appName,
+                            "query": query,
+                            "playerState": playerState,
+                            "error": errorText
+                        ]
+                    )
+                    markRequestCompleted(
+                        route: route,
+                        executionStartedAt: executionStartedAt,
+                        timing: timing,
+                        status: "failed",
+                        extra: [
+                            "executor": backend.executorID,
+                            "executionMethod": Self.spotifySearchPlayExecutionMethod(for: backend),
+                            "appName": request.appName,
+                            "query": query,
+                            "playerState": playerState,
+                            "error": errorText
+                        ]
+                    )
+                    return
+                }
                 OpenClickyMessageLogStore.shared.append(
                     lane: "computer-use",
                     direction: "outgoing",
@@ -5112,6 +5239,7 @@ final class CompanionManager: ObservableObject {
                         "executionMethod": Self.spotifySearchPlayExecutionMethod(for: backend),
                         "appName": request.appName,
                         "query": query,
+                        "playerState": playerState,
                         "instruction": request.instruction
                     ]
                 )
@@ -5123,7 +5251,8 @@ final class CompanionManager: ObservableObject {
                         "executor": backend.executorID,
                         "executionMethod": Self.spotifySearchPlayExecutionMethod(for: backend),
                         "appName": request.appName,
-                        "query": query
+                        "query": query,
+                        "playerState": playerState
                     ]
                 )
             } catch {
@@ -9723,9 +9852,16 @@ final class CompanionManager: ObservableObject {
     }
 
     private static func spotifyPlaybackControlAction(from actionText: String) -> OpenClickySpotifyPlaybackControlAction? {
-        let normalized = normalizedSpokenCommandText(cleanedCompositeAppActionText(actionText))
+        var normalized = normalizedSpokenCommandText(cleanedCompositeAppActionText(actionText))
+        normalized = normalized.replacingOccurrences(
+            of: #"\s+(?:in|on)\s+spotify$"#,
+            with: "",
+            options: .regularExpression
+        )
         switch normalized {
-        case "play", "resume", "start playing", "keep playing":
+        case "play", "resume", "start playing", "keep playing",
+             "play music", "play some music", "play something", "play anything",
+             "put on music", "put some music on", "put anything on":
             return .play
         case "pause", "stop", "stop playing":
             return .pause
@@ -9750,9 +9886,9 @@ final class CompanionManager: ObservableObject {
     private static func spotifySearchPlayExecutionMethod(for backend: OpenClickyComputerUseBackendID) -> String {
         switch backend {
         case .backgroundComputerUse:
-            return "NSWorkspace.open_spotify_uri + BackgroundComputerUse /v1/press_key"
+            return "NSWorkspace.open_spotify_uri + BackgroundComputerUse /v1/press_key + AppleScript playback verification"
         case .nativeSwift:
-            return "NSWorkspace.open_spotify_uri + OpenClickyNativeComputerUseController.pressKey"
+            return "NSWorkspace.open_spotify_uri + OpenClickyNativeComputerUseController.pressKey + AppleScript playback verification"
         }
     }
 
@@ -16595,6 +16731,12 @@ extension CompanionManager {
         guard let request = standaloneSpotifyPlaybackRequest(from: transcript),
               request.appName == "Spotify" else { return nil }
         return spotifyPlaybackQuery(from: request.actionText)
+    }
+
+    static func testSpotifyPlaybackControlAction(from transcript: String) -> String? {
+        guard let request = standaloneSpotifyPlaybackRequest(from: transcript),
+              request.appName == "Spotify" else { return nil }
+        return spotifyPlaybackControlAction(from: request.actionText)?.rawValue
     }
 
     static func testSpotifySearchPlayExecutionMethods(

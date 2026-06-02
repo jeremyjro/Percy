@@ -1150,6 +1150,12 @@ struct OpenClickySettingsView: View {
                     isGranted: companionManager.hasFullDiskAccessPermission,
                     settingsURL: OpenClickyMacPrivacyPermissionProbe.fullDiskAccessSettingsURL
                 )
+                permissionRow(
+                    title: "System Events Automation",
+                    statusText: companionManager.hasSystemEventsAutomationPermission ? "Granted for System Events" : "Needs Automation approval",
+                    isGranted: companionManager.hasSystemEventsAutomationPermission,
+                    settingsURL: OpenClickyMacPrivacyPermissionProbe.automationSettingsURL
+                )
             }
 
             settingsGroup("Desktop notifications") {
@@ -1206,6 +1212,12 @@ struct OpenClickySettingsView: View {
                 }
                 actionRow(title: "Open Full Disk Access settings", systemImageName: "externaldrive.badge.checkmark") {
                     companionManager.openFullDiskAccessSettings()
+                }
+                actionRow(title: "Open Automation settings", systemImageName: "terminal") {
+                    companionManager.openAutomationSettings()
+                }
+                actionRow(title: "Request System Events access", systemImageName: "gearshape.2") {
+                    companionManager.requestSystemEventsAutomationPermission()
                 }
             }
         }
@@ -1301,11 +1313,20 @@ struct OpenClickySettingsView: View {
             }
 
             settingsGroup("Automation access") {
-                valueRow(
-                    title: "Automation",
-                    subtitle: "macOS grants Automation per target app when OpenClicky first sends an Apple Event.",
-                    systemImageName: "terminal"
+                permissionRow(
+                    title: "System Events",
+                    statusText: companionManager.hasSystemEventsAutomationPermission ? "Ready for menu, process, and UI scripting probes" : "Needed for System Events UI scripting fallbacks",
+                    isGranted: companionManager.hasSystemEventsAutomationPermission,
+                    settingsURL: OpenClickyMacPrivacyPermissionProbe.automationSettingsURL
                 )
+                valueRow(
+                    title: "Useful System Events routes",
+                    subtitle: "Frontmost app, app processes, menu items, keystroke fallbacks, and guarded UI scripting.",
+                    systemImageName: "list.bullet.rectangle"
+                )
+                actionRow(title: "Request System Events access", systemImageName: "gearshape.2") {
+                    companionManager.requestSystemEventsAutomationPermission()
+                }
             }
         }
     }

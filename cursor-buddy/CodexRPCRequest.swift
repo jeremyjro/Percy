@@ -61,6 +61,15 @@ nonisolated enum CodexRPCErrorMessage {
             return readableMessage(from: json)
         }
 
+        let normalized = trimmed
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .lowercased()
+        if normalized.contains("access token could not be refreshed")
+            && normalized.contains("refresh token")
+            && normalized.contains("already used") {
+            return "OpenClicky found a stale Codex ChatGPT sign-in. Sign into Codex again, or add a Codex/OpenAI API key in OpenClicky Settings."
+        }
+
         return trimmed
     }
 

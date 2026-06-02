@@ -150,7 +150,7 @@ final class CodexHomeManager {
             learnedSkillsDirectory: learnedSkillsDirectory,
             bundledWikiSeedDirectory: wikiSeed
         )
-        try copyDefaultCodexAuthIfAvailable(to: home)
+        try linkDefaultCodexAuthIfAvailable(to: home)
 
         return CodexHomeLayout(
             homeDirectory: home,
@@ -182,7 +182,8 @@ final class CodexHomeManager {
             learnedSkillsDirectoryName: learnedSkillsDirectoryName,
             includeOpenAIDeveloperDocsMCP: AppBundleConfiguration.mcpDeveloperDocsEnabled(),
             includeComposioConnectMCP: AppBundleConfiguration.mcpComposioConnectEnabled(),
-            cuaDriverMCPCommand: cuaDriverCommand
+            cuaDriverMCPCommand: cuaDriverCommand,
+            preferAPIKeyAuthForDefaultOpenAI: Self.hasConfiguredOpenAIAPIKey()
         )
         let configFile = codexHomeDirectory.appendingPathComponent("config.toml", isDirectory: false)
         try config.render().write(to: configFile, atomically: true, encoding: .utf8)
@@ -367,18 +368,45 @@ final class CodexHomeManager {
         return nil
     }
 
-    private func copyDefaultCodexAuthIfAvailable(to home: URL) throws {
+    private static func hasConfiguredOpenAIAPIKey() -> Bool {
+        guard let apiKey = AppBundleConfiguration.openAIAPIKey() else { return false }
+        return !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func linkDefaultCodexAuthIfAvailable(to home: URL) throws {
         guard ClickyCodexBackend.isDefaultOpenAIBaseURL(workerBaseURL) else { return }
 
         let destination = home.appendingPathComponent("auth.json", isDirectory: false)
-        guard !fileManager.fileExists(atPath: destination.path) else { return }
-
         let source = fileManager.homeDirectoryForCurrentUser
             .appendingPathComponent(".codex", isDirectory: true)
             .appendingPathComponent("auth.json", isDirectory: false)
         guard fileManager.fileExists(atPath: source.path) else { return }
 
-        try fileManager.copyItem(at: source, to: destination)
+        if fileManager.fileExists(atPath: destination.path) {
+            if isSymbolicLink(destination, pointingTo: source) {
+                return
+            }
+            try archiveExistingItem(at: destination, reason: "codex-auth-replacement")
+        }
+
+        try fileManager.createSymbolicLink(at: destination, withDestinationURL: source)
+    }
+
+    private func isSymbolicLink(_ url: URL, pointingTo target: URL) -> Bool {
+        guard let attributes = try? fileManager.attributesOfItem(atPath: url.path),
+              let fileType = attributes[.type] as? FileAttributeType,
+              fileType == .typeSymbolicLink,
+              let destinationPath = try? fileManager.destinationOfSymbolicLink(atPath: url.path) else {
+            return false
+        }
+
+        let resolvedDestination: URL
+        if destinationPath.hasPrefix("/") {
+            resolvedDestination = URL(fileURLWithPath: destinationPath)
+        } else {
+            resolvedDestination = url.deletingLastPathComponent().appendingPathComponent(destinationPath)
+        }
+        return resolvedDestination.standardizedFileURL.path == target.standardizedFileURL.path
     }
 
     private func copyReplacingItem(at source: URL, to destination: URL) throws {

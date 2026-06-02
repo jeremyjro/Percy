@@ -47,16 +47,14 @@ nonisolated final class CodexProcessManager: @unchecked Sendable {
         )
         Self.applyGogCLIEnvironment(to: &environment)
 
-        let codexAuthFile = codexHome.appendingPathComponent("auth.json", isDirectory: false)
         let configFile = codexHome.appendingPathComponent("config.toml", isDirectory: false)
         let configText = (try? String(contentsOf: configFile, encoding: .utf8)) ?? ""
         let prefersChatGPTAuth = configText.contains("preferred_auth_method = \"chatgpt\"")
-        if prefersChatGPTAuth, FileManager.default.fileExists(atPath: codexAuthFile.path) {
-            environment.removeValue(forKey: "OPENAI_API_KEY")
-        } else if environment["OPENAI_API_KEY"]?.isEmpty != false,
-                  let configuredAPIKey = AppBundleConfiguration.openAIAPIKey(),
-                  !configuredAPIKey.isEmpty {
+        if let configuredAPIKey = AppBundleConfiguration.openAIAPIKey(),
+           !configuredAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             environment["OPENAI_API_KEY"] = configuredAPIKey
+        } else if prefersChatGPTAuth {
+            environment.removeValue(forKey: "OPENAI_API_KEY")
         }
 
         process.environment = environment

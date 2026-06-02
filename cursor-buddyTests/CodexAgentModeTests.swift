@@ -27,6 +27,30 @@ struct CodexAgentModeTests {
         #expect(rendered.contains("https://connect.composio.dev/mcp"))
     }
 
+    @Test func codexConfigCanPreferAPIKeyForDefaultOpenAIWhenConfigured() throws {
+        let template = ClickyCodexConfigTemplate(
+            model: "gpt-5.4",
+            reasoningEffort: "medium",
+            workerBaseURL: URL(string: "https://api.openai.com/v1")!,
+            includeOpenAIDeveloperDocsMCP: false,
+            preferAPIKeyAuthForDefaultOpenAI: true
+        )
+
+        let rendered = template.render()
+
+        #expect(rendered.contains("model_provider = \"openai\""))
+        #expect(rendered.contains("preferred_auth_method = \"apikey\""))
+        #expect(!rendered.contains("[model_providers.openclicky]"))
+    }
+
+    @Test func staleCodexRefreshTokenErrorGetsActionableCopy() throws {
+        let raw = "Your access token could not be refreshed because your refresh token was already used. Please log out and sign in again."
+
+        let message = CodexRPCErrorMessage.readableMessage(from: raw)
+
+        #expect(message == "OpenClicky found a stale Codex ChatGPT sign-in. Sign into Codex again, or add a Codex/OpenAI API key in OpenClicky Settings.")
+    }
+
     @Test func codexConfigKeepsCustomResponsesBackendAPIKeyBackcompat() throws {
         let template = ClickyCodexConfigTemplate(
             model: "gpt-5.4",

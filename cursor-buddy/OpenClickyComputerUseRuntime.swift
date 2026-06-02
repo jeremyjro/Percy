@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import Carbon
 import Combine
 import CoreGraphics
 import Darwin
@@ -679,6 +680,26 @@ enum OpenClickyComputerUsePermissionProbe {
 enum OpenClickyMacPrivacyPermissionProbe {
     static let fullDiskAccessSettingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")!
     static let automationSettingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")!
+    static let systemEventsBundleIdentifier = "com.apple.systemevents"
+
+    static func hasSystemEventsAutomationPermission(prompt: Bool = false) -> Bool {
+        hasAppleEventsAutomationPermission(
+            targetBundleIdentifier: systemEventsBundleIdentifier,
+            prompt: prompt
+        )
+    }
+
+    static func hasAppleEventsAutomationPermission(targetBundleIdentifier: String, prompt: Bool = false) -> Bool {
+        let target = NSAppleEventDescriptor(bundleIdentifier: targetBundleIdentifier)
+        var targetDescriptor = target.aeDesc
+        let status = AEDeterminePermissionToAutomateTarget(
+            &targetDescriptor,
+            typeWildCard,
+            typeWildCard,
+            prompt
+        )
+        return status == noErr
+    }
 
     static func hasLikelyFullDiskAccess(fileManager: FileManager = .default) -> Bool {
         let home = fileManager.homeDirectoryForCurrentUser
