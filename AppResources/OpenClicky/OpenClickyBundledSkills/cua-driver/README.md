@@ -1,16 +1,16 @@
-# cua-driver — OpenClicky Computer Use skill
+# cua-driver — HeyClicky Computer Use skill
 
-OpenClicky's bundled Computer Use skill teaches Codex agents to drive
+HeyClicky's bundled Computer Use skill teaches Codex agents to drive
 native macOS apps through the local `computer-use` MCP server, backed
 by [`cua-driver`](https://github.com/trycua/cua/tree/main/libs/cua-driver).
 Agents snapshot an app's accessibility tree, act by `element_index`
 where possible, and verify via re-snapshot. Backgrounded-first: no
 focus steal, no cursor warp, no Space follow.
 
-This copy is product-managed inside OpenClicky. Do not ask users to
+This copy is product-managed inside Clicky. Do not ask users to
 install `CuaDriver.app`, run the standalone `cua-driver` CLI, or
-change their browser profile. OpenClicky ships its own helper binary
-inside `OpenClicky.app`, inherits OpenClicky's Accessibility and Screen
+change their browser profile. HeyClicky ships its own helper binary
+inside `Clicky.app`, inherits HeyClicky's Accessibility and Screen
 Recording grants, and exposes a curated MCP tool subset.
 
 ## What the skill covers
@@ -24,10 +24,10 @@ Recording grants, and exposes a curated MCP tool subset.
   including the minimized-Chrome keyboard-commit caveat and the
   non-omnibox `set_value` workaround for ordinary fields.
 - Trajectory recording (`RECORDING.md`) — upstream reference only in
-  this build. OpenClicky's default runtime does not expose recording or
+  this build. HeyClicky's default runtime does not expose recording or
   replay tools.
 - Canvas/viewport apps (Blender, Unity, GHOST, Qt, wxWidgets) —
-  diagnostic guidance only in this build. OpenClicky's default runtime blocks
+  diagnostic guidance only in this build. HeyClicky's default runtime blocks
   coordinate clicks and does not expose pixel/recording/replay tools; stop and
   explain the missing capability instead of guessing.
 
@@ -36,10 +36,10 @@ See `SKILL.md` for the main body.
 ## Runtime prerequisites
 
 1. **macOS 14 or newer**.
-2. **OpenClicky permissions**: Accessibility and Screen Recording granted
-   to OpenClicky.app during onboarding.
+2. **HeyClicky permissions**: Accessibility and Screen Recording granted
+   to Clicky.app during onboarding.
 3. **Bundled helper present**:
-   `OpenClicky.app/Contents/Helpers/OpenClickyComputerUseRuntime`.
+   `Clicky.app/Contents/Helpers/ClickyComputerUseRuntime`.
 
 ## Invoking the skill
 
@@ -55,7 +55,7 @@ Downloads folder in Finder", "click the Save button in Numbers", or
 - `WEB_APPS.md` — browsers, Electron, Tauri (Chromium + WebKit). Loaded
   on demand when SKILL.md's pointer is followed.
 - `RECORDING.md` — upstream trajectory recording / replay reference.
-  OpenClicky's default runtime does not expose these tools.
+  HeyClicky's default runtime does not expose these tools.
 - `TESTS.md` — manual test scripts for end-to-end skill verification.
 
 ## Troubleshooting
@@ -79,10 +79,10 @@ Downloads folder in Finder", "click the Save button in Numbers", or
 
 ## Updates
 
-The skill evolves alongside the driver. In OpenClicky, update it through
+The skill evolves alongside the driver. In HeyClicky, update it through
 the bundled runtime upgrade path: bump
-`OpenClickyComputerUseRuntime/Package.swift`, sync the upstream skill docs,
-then re-apply OpenClicky's managed-runtime guardrails.
+`ClickyComputerUseRuntime/Package.swift`, sync the upstream skill docs,
+then re-apply HeyClicky's managed-runtime guardrails.
 
 ## License
 

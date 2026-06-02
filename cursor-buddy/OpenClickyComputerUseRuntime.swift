@@ -238,7 +238,41 @@ final class OpenClickyBackgroundComputerUseController: ObservableObject {
         }
     }
 
+    func ensureRuntimeReady(timeoutSeconds: TimeInterval = 10) async throws {
+        refreshStatus()
+        if status.isRuntimeReady {
+            return
+        }
+
+        guard status.sourceAvailable else {
+            throw OpenClickyBackgroundComputerUseError.runtimeUnavailable(status.summary)
+        }
+        guard status.startScriptAvailable else {
+            throw OpenClickyBackgroundComputerUseError.runtimeUnavailable(status.summary)
+        }
+
+        if status.isStarting == false {
+            startRuntime()
+        }
+
+        let deadline = Date().addingTimeInterval(timeoutSeconds)
+        while Date() < deadline {
+            try await Task.sleep(nanoseconds: 250_000_000)
+            refreshStatus()
+            if status.isRuntimeReady {
+                return
+            }
+            if let lastErrorMessage = status.lastErrorMessage,
+               !lastErrorMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                throw OpenClickyBackgroundComputerUseError.runtimeUnavailable(status.summary)
+            }
+        }
+
+        throw OpenClickyBackgroundComputerUseError.runtimeUnavailable(status.summary)
+    }
+
     func captureFrontmostWindowAsJPEG() async throws -> OpenClickyBackgroundComputerUseWindowCapture {
+        try await ensureRuntimeReady()
         let target = try await resolveTargetWindow(appName: nil)
         let state = try await requestWindowState(windowID: target.windowID, imageMode: "path")
 
@@ -262,7 +296,7 @@ final class OpenClickyBackgroundComputerUseController: ObservableObject {
             title: state.window.title,
             bundleID: state.window.bundleID,
             pid: state.window.pid,
-            baseURL: try runtimeBaseURL().absoluteString,
+            baseURL: try await runtimeBaseURL().absoluteString,
             stateToken: state.stateToken,
             imagePath: image.imagePath,
             screenshotWidthInPixels: image.pixelWidth,
@@ -271,6 +305,7 @@ final class OpenClickyBackgroundComputerUseController: ObservableObject {
     }
 
     func pressKey(_ key: String, modifiers: [String] = [], targetAppName: String? = nil) async throws -> OpenClickyBackgroundComputerUseActionResult {
+        try await ensureRuntimeReady()
         let target = try await resolveTargetWindow(appName: targetAppName)
         OpenClickyApplicationUsageLogStore.shared.recordApplication(
             name: targetAppName,
@@ -302,6 +337,7 @@ final class OpenClickyBackgroundComputerUseController: ObservableObject {
     }
 
     func typeText(_ text: String, targetAppName: String? = nil) async throws -> OpenClickyBackgroundComputerUseActionResult {
+        try await ensureRuntimeReady()
         let target = try await resolveTargetWindow(appName: targetAppName)
         OpenClickyApplicationUsageLogStore.shared.recordApplication(
             name: targetAppName,
@@ -383,8 +419,8 @@ final class OpenClickyBackgroundComputerUseController: ObservableObject {
         )
     }
 
-    private func runtimeBaseURL() throws -> URL {
-        refreshStatus()
+    private func runtimeBaseURL() async throws -> URL {
+        try await ensureRuntimeReady()
         guard let baseURLString = status.baseURL,
               let baseURL = URL(string: baseURLString) else {
             throw OpenClickyBackgroundComputerUseError.runtimeUnavailable(status.summary)
@@ -393,11 +429,12 @@ final class OpenClickyBackgroundComputerUseController: ObservableObject {
         return baseURL
     }
 
+
     private func postJSON<Request: Encodable, Response: Decodable>(
         path: String,
         payload: Request
     ) async throws -> Response {
-        let baseURL = try runtimeBaseURL()
+        let baseURL = try await runtimeBaseURL()
         let relativePath = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         guard let url = URL(string: relativePath, relativeTo: baseURL)?.absoluteURL else {
             throw OpenClickyBackgroundComputerUseError.runtimeUnavailable("Invalid runtime path \(path)")

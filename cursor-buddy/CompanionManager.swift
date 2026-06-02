@@ -1203,6 +1203,13 @@ final class CompanionManager: ObservableObject {
     private static let pendingAgentOfferTTL: TimeInterval = 90
     private static let deferredLiveAgentRoutePartialTTL: TimeInterval = 20
 
+    /// Guards against a single voice utterance launching the same agent
+    /// task twice when overlapping routes both resolve to an agent start.
+    private var lastVoiceAgentStartFingerprint: String?
+    private var lastVoiceAgentStartAt: Date?
+    private var lastVoiceAgentStartSessionID: UUID?
+    private static let voiceAgentStartDuplicateTTL: TimeInterval = 8
+
     // MARK: Speculative pre-fire state
     //
     // While the user is still talking, Deepgram emits interim
@@ -4140,7 +4147,8 @@ final class CompanionManager: ObservableObject {
             source: "realtime_voice",
             selectionSource: "realtime_voice_final_transcript",
             directComputerUseSource: "realtime_final_transcript",
-            includeQuickLocalResponses: true
+            includeQuickLocalResponses: true,
+            hybridAgentStartCountsAsHandled: true
         ) {
             return true
         }
@@ -4259,7 +4267,8 @@ final class CompanionManager: ObservableObject {
         source: String,
         selectionSource: String,
         directComputerUseSource: String,
-        includeQuickLocalResponses: Bool
+        includeQuickLocalResponses: Bool,
+        hybridAgentStartCountsAsHandled: Bool = false
     ) -> Bool {
         if handleAgentCancellationRequestIfNeeded(from: transcript) {
             return true
@@ -4277,7 +4286,7 @@ final class CompanionManager: ObservableObject {
             return true
         }
         if startHybridAgentTaskIfNeeded(from: transcript) {
-            return false
+            return hybridAgentStartCountsAsHandled
         }
         if startExplicitAgentTaskIfRequested(from: transcript) {
             return true
@@ -11465,6 +11474,30 @@ final class CompanionManager: ObservableObject {
             return
         }
 
+        let startFingerprint = Self.voiceAgentStartFingerprint(
+            instruction: instruction,
+            route: route
+        )
+        let now = Date()
+        if lastVoiceAgentStartFingerprint == startFingerprint,
+           let previousStart = lastVoiceAgentStartAt,
+           now.timeIntervalSince(previousStart) <= Self.voiceAgentStartDuplicateTTL {
+            OpenClickyMessageLogStore.shared.append(
+                lane: "agent",
+                direction: "incoming",
+                event: "openclicky.agent_task.duplicate_start_suppressed",
+                fields: [
+                    "route": route,
+                    "instruction": instruction,
+                    "ageMs": Int(now.timeIntervalSince(previousStart) * 1000),
+                    "requestID": activeRequestTiming?.requestID ?? "none"
+                ]
+            )
+            return
+        }
+        lastVoiceAgentStartFingerprint = startFingerprint
+        lastVoiceAgentStartAt = now
+
         let timing = activeRequestTiming
         let executionStartedAt = markRequestExecutionStarted(
             route: route,
@@ -11527,6 +11560,7 @@ final class CompanionManager: ObservableObject {
             if let timing {
                 agentRequestTimingsBySessionID[agentSession.id] = timing
             }
+            lastVoiceAgentStartSessionID = agentSession.id
             agentExecutionStartDatesBySessionID[agentSession.id] = executionStartedAt
             let dockItem = ClickyAgentDockItem(
                 id: dockItemID,
@@ -11630,6 +11664,17 @@ final class CompanionManager: ObservableObject {
                 }
             }
         }
+    }
+
+    private static func voiceAgentStartFingerprint(instruction: String, route: String) -> String {
+        let normalizedInstruction = instruction
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .lowercased()
+            .replacingOccurrences(of: #"[^a-z0-9]+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedRoute = route
+            .replacingOccurrences(of: #"\.split$"#, with: "", options: .regularExpression)
+        return "\(normalizedRoute)|\(normalizedInstruction)"
     }
 
     private func ensureCursorOverlayVisibleForAgentTask() {
@@ -13074,34 +13119,21 @@ final class CompanionManager: ObservableObject {
 
         do {
             if selectedComputerUseBackend == .backgroundComputerUse {
-                let backgroundStatus = backgroundComputerUseController.status
-                if backgroundStatus.isRuntimeReady {
-                    do {
-                        let capture = try await backgroundComputerUseController.captureFrontmostWindowAsJPEG()
-                        return try writeBackgroundComputerUseScreenContext(capture, minimumPasteboardChangeCount: minimumPasteboardChangeCount)
-                    } catch {
-                        OpenClickyMessageLogStore.shared.append(
-                            lane: "computer-use",
-                            direction: "error",
-                            event: "background_computer_use.screen_context_error",
-                            fields: [
-                                "backend": selectedComputerUseBackend.rawValue,
-                                "error": error.localizedDescription,
-                                "status": backgroundComputerUseController.status.summary
-                            ]
-                        )
-                        print("OpenClicky Agent Mode: Background Computer Use context unavailable: \(error)")
-                    }
-                } else {
+                do {
+                    let capture = try await backgroundComputerUseController.captureFrontmostWindowAsJPEG()
+                    return try writeBackgroundComputerUseScreenContext(capture, minimumPasteboardChangeCount: minimumPasteboardChangeCount)
+                } catch {
                     OpenClickyMessageLogStore.shared.append(
                         lane: "computer-use",
-                        direction: "internal",
-                        event: "background_computer_use.screen_context_skipped",
+                        direction: "error",
+                        event: "background_computer_use.screen_context_error",
                         fields: [
                             "backend": selectedComputerUseBackend.rawValue,
-                            "status": backgroundStatus.summary
+                            "error": error.localizedDescription,
+                            "status": backgroundComputerUseController.status.summary
                         ]
                     )
+                    print("OpenClicky Agent Mode: Background Computer Use context unavailable: \(error)")
                 }
             } else if nativeComputerUseController.isEnabled {
                 do {
@@ -16588,6 +16620,10 @@ extension CompanionManager {
 
     static func testParallelAgentInstructions(from instruction: String) -> [String] {
         parallelAgentInstructions(from: instruction)
+    }
+
+    static func testVoiceAgentStartFingerprint(instruction: String, route: String) -> String {
+        voiceAgentStartFingerprint(instruction: instruction, route: route)
     }
 }
 #endif

@@ -140,6 +140,18 @@ struct OpenClickyComputerUseTests {
         #expect(!backgroundMethods.completed.localizedCaseInsensitiveContains("verification"))
     }
 
+    @Test func voiceAgentStartFingerprintNormalizesDuplicateRealtimeRoutes() throws {
+        let first = CompanionManager.testVoiceAgentStartFingerprint(
+            instruction: "Figure out why our background computer-use path, C U A, is reporting background agent not started yet.",
+            route: "agent.hybrid_start"
+        )
+        let repeated = CompanionManager.testVoiceAgentStartFingerprint(
+            instruction: "figure out why our background computer use path c u a is reporting background agent not started yet",
+            route: "agent.hybrid_start"
+        )
+        #expect(first == repeated)
+    }
+
     @Test func realtimeTwoIsTheDefaultVoiceInteractionModel() throws {
         #expect(OpenClickyModelCatalog.defaultVoiceResponseModelID == "gpt-realtime-2")
         #expect(OpenClickyModelCatalog.defaultCodexActionsModelID != OpenClickyModelCatalog.defaultVoiceResponseModelID)

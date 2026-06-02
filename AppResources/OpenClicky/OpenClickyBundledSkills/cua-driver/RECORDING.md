@@ -1,9 +1,9 @@
 # Recording & replaying trajectories
 
-This is upstream reference material only. OpenClicky's default managed
+This is upstream reference material only. HeyClicky's default managed
 runtime does not expose Computer Use recording or replay tools.
 
-## OpenClicky Behavior
+## HeyClicky Behavior
 
 - Do not try to enable recording or replay from a child worker.
 - Do not shell out to `cua-driver` recording commands.
@@ -20,7 +20,7 @@ demos, regression diffs, or training data. That upstream mode records
 action inputs, post-action snapshots, screenshots, and timing metadata
 into per-turn folders.
 
-That information is useful context for a future OpenClicky runtime, but it
+That information is useful context for a future HeyClicky runtime, but it
 is not a callable surface in this release. The only shipped Computer Use
 loop is:
 

@@ -192,7 +192,7 @@ final class OpenClickyAgentStore: ObservableObject {
           "skill-installer",
           "find-skills",
           "codex",
-          "openclicky-repo-operator",
+          "clicky-repo-operator",
           "optimize-openclicky-skills"
         ])
       )

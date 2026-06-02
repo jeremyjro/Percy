@@ -109,6 +109,16 @@ struct OpenClickyAgentDefinition: Identifiable, Equatable {
 
   private static let maxEmbeddedSkillBytes = 64 * 1024
   private static let skillIDAllowedScalars = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "._-"))
+  private static let legacySkillAliases: [String: [String]] = [
+    "clicky-artifacts": ["openclicky-artifacts"],
+    "clicky-build-preview": ["openclicky-build-preview"],
+    "clicky-creative-studio": ["openclicky-creative-studio"],
+    "clicky-dev-setup-doctor": ["openclicky-dev-setup-doctor"],
+    "clicky-email-assistant": ["openclicky-email-assistant"],
+    "clicky-google-workspace": ["google-workspace-gogcli"],
+    "clicky-repo-operator": ["openclicky-repo-operator"],
+    "clicky-research-report": ["openclicky-research-report"]
+  ]
 
   private func resolvedEnabledSkillInstructions() -> [String] {
     let fileManager = FileManager.default
@@ -143,17 +153,21 @@ struct OpenClickyAgentDefinition: Identifiable, Equatable {
       guard !seen.contains(normalized) else { return nil }
       seen.insert(normalized)
 
-      for root in searchRoots {
-        guard let skillFile = Self.safeSkillFile(skillID: normalized, root: root) else { continue }
-        let attributes = try? fileManager.attributesOfItem(atPath: skillFile.path)
-        let byteCount = (attributes?[.size] as? NSNumber)?.intValue ?? 0
-        guard byteCount > 0 else { continue }
-        guard byteCount <= Self.maxEmbeddedSkillBytes else {
-          return "### Skill: \(normalized)\nPath: \(skillFile.path)\n\nOpenClicky skipped this SKILL.md because it is too large to embed safely (\(byteCount) bytes)."
-        }
-        if let text = try? String(contentsOf: skillFile, encoding: .utf8),
-           !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-          return "### Skill: \(normalized)\nPath: \(skillFile.path)\n\n\(text)"
+      let candidateSkillIDs = [normalized] + (Self.legacySkillAliases[normalized] ?? [])
+      for candidateSkillID in candidateSkillIDs {
+        for root in searchRoots {
+          guard let skillFile = Self.safeSkillFile(skillID: candidateSkillID, root: root) else { continue }
+          let attributes = try? fileManager.attributesOfItem(atPath: skillFile.path)
+          let byteCount = (attributes?[.size] as? NSNumber)?.intValue ?? 0
+          guard byteCount > 0 else { continue }
+          guard byteCount <= Self.maxEmbeddedSkillBytes else {
+            return "### Skill: \(normalized)\nPath: \(skillFile.path)\n\nOpenClicky skipped this SKILL.md because it is too large to embed safely (\(byteCount) bytes)."
+          }
+          if let text = try? String(contentsOf: skillFile, encoding: .utf8),
+             !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let aliasNote = candidateSkillID == normalized ? "" : "\nResolved legacy skill ID: \(candidateSkillID)\n"
+            return "### Skill: \(normalized)\nPath: \(skillFile.path)\(aliasNote)\n\(text)"
+          }
         }
       }
       return "### Skill: \(normalized)\nPath: unresolved\n\nOpenClicky could not find this SKILL.md locally. If this skill is required, install or create it before relying on it."
