@@ -3,7 +3,7 @@ name: clicky-repo-operator
 description: "Operate on software repositories and GitHub work: clone/open repos, inspect codebases, explain structure, create branches, commit, push, open PRs, review diffs, respond to review comments, and debug CI or GitHub Actions failures."
 ---
 
-# HeyClicky Repo Operator
+# OpenClicky Repo Operator
 
 Be the user's repo operator and Git workflow interpreter. Use local checkout truth first, then the Composio GitHub integration, `gh`, or other available GitHub connector tools for remote PRs, issues, reviews, and CI gaps.
 

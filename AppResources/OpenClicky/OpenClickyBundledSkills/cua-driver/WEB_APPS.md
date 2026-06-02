@@ -177,7 +177,7 @@ When the target window is **minimized** (genie'd into the Dock):
   navigation**: use
   `launch_app({bundle_id: <default_browser_bundle_id>, urls:
   ["https://..."]})` instead. URL-like `set_value`/`type_text`
-  fallbacks are blocked in HeyClicky's runtime because logs showed they
+  fallbacks are blocked in OpenClicky's runtime because logs showed they
   can foreground the browser or fail silently.
 - **Secondary workaround — find a clickable equivalent**: If
   `set_value` doesn't auto-commit a normal form value, find a button
@@ -243,7 +243,7 @@ toolbar items — anything that advertises `AXShowMenu`), use
 identical to `click({pid, window_id, element_index, action: "show_menu"})`.
 
 For a context menu on **web content itself** (right-clicking an image,
-a selection, the page background), HeyClicky's default runtime has no
+a selection, the page background), OpenClicky's default runtime has no
 coordinate right-click path. Prefer `element_index` whenever the target
 is AX-addressable; otherwise stop and report that the interaction needs
 pixel/pointer mode.
@@ -347,11 +347,11 @@ those browsers.
 For Brave and Edge, pass `com.brave.Browser` or
 `com.microsoft.edgemac` as the `bundle_id`. Do not run the standalone
 shell/AppleScript preference-editing recipes from upstream Cua docs in
-HeyClicky's managed runtime.
+OpenClicky's managed runtime.
 
 ### Safari and Arc
 
-Do not use Safari or Arc AppleScript JavaScript bridges in HeyClicky's
+Do not use Safari or Arc AppleScript JavaScript bridges in OpenClicky's
 managed runtime. They require browser-specific Apple Events state,
 foreground assumptions, clipboard side channels, or security prompts
 that bypass `computer-use`. If a task genuinely needs in-page script
@@ -361,7 +361,7 @@ that this build does not ship a dedicated browser automation runtime.
 ### Firefox
 
 Firefox has no `execute javascript` capability. Bugzilla #287447
-(filed 2004) tracks this and remains unresolved. HeyClicky's current
+(filed 2004) tracks this and remains unresolved. OpenClicky's current
 curated runtime does not ship a Firefox-specific automation bridge; if
 AX interaction cannot complete the task, report the missing browser
 capability rather than inventing another route.

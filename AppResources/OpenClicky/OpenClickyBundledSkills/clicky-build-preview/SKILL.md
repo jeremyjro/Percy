@@ -3,7 +3,7 @@ name: clicky-build-preview
 description: Build, modify, launch, preview, and iterate websites, web apps, dashboards, landing pages, HTML files, React/Next apps, and frontend UI. Use when the user wants a visible working thing, not only code.
 ---
 
-# HeyClicky Build Preview
+# OpenClicky Build Preview
 
 Build the thing, launch it when appropriate, show or report where it is, and iterate. This workflow absorbs frontend design, polish, and animation guidance without exposing those raw skills separately.
 

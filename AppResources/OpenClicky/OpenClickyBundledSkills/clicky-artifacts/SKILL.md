@@ -3,7 +3,7 @@ name: clicky-artifacts
 description: Open, reveal, find, export, rename, move, organize, or explain existing Clicky-generated files and local artifacts. Use when the user asks where a PDF, CSV, DOCX, PPTX, XLSX, HTML page, report, deck, video, image, or generated file went, asks to open it again, show it in Finder, export it, or organize it. Do not use for creating the content from scratch unless another workflow already produced the artifact.
 ---
 
-# HeyClicky Artifacts
+# OpenClicky Artifacts
 
 Manage concrete files created or touched by Clicky. This workflow wraps the available file/document capabilities so every artifact job ends with an exact path, an opened/revealed file, or a clear blocker.
 
@@ -26,7 +26,7 @@ Manage concrete files created or touched by Clicky. This workflow wraps the avai
 4. Open or reveal the artifact only after verifying it exists. For browser-viewable files, do not use browser-specific shell launches like `open -a Google Chrome`; use the default handler or the Computer Use path when real browser control is required.
 
 ## Fallbacks
-- If no exact path is known, search likely output roots first: current workspace, `output/`, `tmp/`, Desktop, Downloads, and HeyClicky Application Support.
+- If no exact path is known, search likely output roots first: current workspace, `output/`, `tmp/`, Desktop, Downloads, and OpenClicky Application Support.
 - If several candidates match, choose the newest relevant file and mention the candidate count.
 - If the artifact was never created, say so and offer the next concrete creation step.
 

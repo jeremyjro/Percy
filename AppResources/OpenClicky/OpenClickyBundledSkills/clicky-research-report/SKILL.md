@@ -3,7 +3,7 @@ name: clicky-research-report
 description: Research a topic, market, competitor set, product, person, or question and turn findings into a useful Markdown, PDF, DOCX, CSV, or brief artifact. Use for competitor research, market intel, source-backed summaries, web research, research briefs, and shareable reports.
 ---
 
-# HeyClicky Research Report
+# OpenClicky Research Report
 
 Turn research into a finished artifact. Prefer search, fetch, curl/API access, source files, and local extraction before any GUI/browser work. Use Cua/Computer Use only when the source truly requires logged-in or visible browser interaction and the runtime exposes that capability.
 

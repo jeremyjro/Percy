@@ -1,9 +1,9 @@
 ---
 name: clicky-creative-studio
-description: "Route broad creative work to available HeyClicky capabilities: frontend polish, design critique, brand/social planning, document/PDF outputs, spreadsheet/table outputs, and existing visual artifact handling. Provider-backed image, video, motion, and new slide/deck generation are not shipped unless the runtime explicitly exposes those capabilities."
+description: "Route broad creative work to available OpenClicky capabilities: frontend polish, design critique, brand/social planning, document/PDF outputs, spreadsheet/table outputs, and existing visual artifact handling. Provider-backed image, video, motion, and new slide/deck generation are not shipped unless the runtime explicitly exposes those capabilities."
 ---
 
-# HeyClicky Creative Studio
+# OpenClicky Creative Studio
 
 Route creative work to the right available medium. Do not make everything an image prompt; choose the production path that gives the user a reliable artifact, and report blockers for unshipped provider-backed routes.
 

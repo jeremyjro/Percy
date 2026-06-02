@@ -3,7 +3,7 @@ name: clicky-email-assistant
 description: Draft, rewrite, summarize, triage, and prepare replies or outreach emails. Use for Gmail/Outlook/Mail tasks, email thread summaries, outbound sequences, follow-ups, humanizing drafts, and Gmail sends that require upgraded send permission plus explicit approval.
 ---
 
-# HeyClicky Email Assistant
+# OpenClicky Email Assistant
 
 Act as a careful communication operator. Draft first, show the target, and require explicit approval before sending, deleting, archiving, labeling, or otherwise changing anything externally visible.
 
@@ -21,10 +21,10 @@ Act as a careful communication operator. Draft first, show the target, and requi
 2. Use `clicky-google-workspace` through Composio first for Gmail and Google contacts when the integration is attached.
 3. Use other connectors only when the runtime actually exposes them.
 4. Produce a draft with subject, recipients, body, and any attachment paths.
-5. For Gmail sends, draft first. If the user explicitly approves sending and Composio reports missing send permission, stop and tell the user HeyClicky's Gmail connection needs send permission in Settings -> Integrations; do not run OAuth from the agent.
+5. For Gmail sends, draft first. If the user explicitly approves sending and Composio reports missing send permission, stop and tell the user OpenClicky's Gmail connection needs send permission in Settings -> Integrations; do not run OAuth from the agent.
 
 ## Fallbacks
-- If no connector is available, use pasted/visible content directly when the user supplied it. For mailbox/account work, explain that the cleaner path is HeyClicky Settings -> Integrations, tell the user to connect/reconnect the named mail app there, and offer voice/in-app guidance through setup; do not offer to connect it yourself and do not use Computer Use to operate HeyClicky's own Settings/Integrations flow. Offer Cua/Computer Use as a visible app/browser fallback for the original mail task, and proceed autonomously only when the user explicitly asked for visible UI or the target has no shipped connector route.
+- If no connector is available, use pasted/visible content directly when the user supplied it. For mailbox/account work, explain that the cleaner path is OpenClicky Settings -> Integrations, tell the user to connect/reconnect the named mail app there, and offer voice/in-app guidance through setup; do not offer to connect it yourself and do not use Computer Use to operate OpenClicky's own Settings/Integrations flow. Offer Cua/Computer Use as a visible app/browser fallback for the original mail task, and proceed autonomously only when the user explicitly asked for visible UI or the target has no shipped connector route.
 - If Gmail auth, upgraded send permission, or a send path is missing, tell the user what is missing and do not pretend the message was sent. Do not keep retrying integration commands while auth or send permission is missing.
 - If a contact list is in CSV/XLSX/Sheets, use `spreadsheet` or `clicky-google-workspace` to inspect it before drafting.
 - For outreach sequences, produce staged drafts and a tracking table rather than blasting messages.

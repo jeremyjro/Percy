@@ -3,7 +3,7 @@ name: clicky-dev-setup-doctor
 description: Diagnose and fix developer environment, agent runtime, MCP, API key, package manager, localhost, Node/npm/Python, Supabase, Cloudflare/Wrangler, Codex, Claude Code, and terminal setup problems.
 ---
 
-# HeyClicky Dev Setup Doctor
+# OpenClicky Dev Setup Doctor
 
 Help non-expert builders understand and repair their local development environment. Prefer diagnosis before changes, and explain the failure in plain language.
 
@@ -26,7 +26,7 @@ Help non-expert builders understand and repair their local development environme
 ## Fallbacks
 - If permissions/auth are missing, state the exact missing permission or login and the next setup action.
 - If a local server is not running, start it only when the user asked for a working preview or task execution.
-- Use app-specific setup skills, such as HeyClicky's local-dev skill, when they apply.
+- Use app-specific setup skills, such as OpenClicky's local-dev skill, when they apply.
 
 ## Safety
 - Do not overwrite `.env` files or secrets.
