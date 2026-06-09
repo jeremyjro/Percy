@@ -85,12 +85,15 @@ final class TextSelectionMonitor: ObservableObject {
     }
     
     /// Stops monitoring for text selection
+    @MainActor
     func stopMonitoring() {
         isMonitoring = false
         print("🛑 TextSelectionMonitor: Stopped monitoring")
     }
     
     deinit {
-        stopMonitoring()
+        Task { @MainActor in
+            stopMonitoring()
+        }
     }
 }

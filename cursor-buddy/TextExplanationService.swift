@@ -74,7 +74,7 @@ final class TextExplanationService: ObservableObject {
     
     /// Makes a direct API call to Claude
     private func callClaudeAPI(prompt: String) async throws -> String {
-        let apiKey = claudeAPI.apiKey ?? ""
+        let apiKey = getAPIKey() ?? ""
         let apiURL = URL(string: "https://api.anthropic.com/v1/messages")!
         
         var request = URLRequest(url: apiURL)
@@ -107,6 +107,11 @@ final class TextExplanationService: ObservableObject {
         }
         
         return text
+    }
+    
+    /// Gets API key from UserDefaults using the same key as the main app
+    private func getAPIKey() -> String? {
+        return UserDefaults.standard.string(forKey: "userAnthropicAPIKey")
     }
     
     /// Builds the explanation prompt for Claude
