@@ -61,7 +61,7 @@ nonisolated enum AppBundleConfiguration {
     static let userGlassOpacityDefaultsKey = "openClickyGlassOpacity"
     static let userGlassFrostingDefaultsKey = "openClickyGlassFrosting"
     static let userThemeDefaultsKey = "openClickyThemeAppearance"
-    static let appGroupIdentifier = "group.com.jeremyjro.percy"
+    static let appGroupIdentifier = "" // Disabled for development signing
 
     static func anthropicAPIKey() -> String? {
         let configuredAnthropicAPIKey = userDefaultsValue(forKey: userAnthropicAPIKeyDefaultsKey) ?? stringValue(

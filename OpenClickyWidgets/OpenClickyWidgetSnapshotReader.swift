@@ -1,7 +1,7 @@
 import Foundation
 
 enum OpenClickyWidgetSnapshotReader {
-    static let appGroupIdentifier = "group.com.jeremyjro.percy"
+    static let appGroupIdentifier = "" // Disabled for development signing
     static let snapshotFileName = "widget-snapshot.json"
 
     static func readSnapshot(fileManager: FileManager = .default) -> OpenClickyWidgetSnapshot {
