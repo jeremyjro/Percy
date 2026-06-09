@@ -1,6 +1,20 @@
-# OpenClicky
+# Percy
 
-OpenClicky is a native macOS menu-bar companion by Jason Kneen. It hosts Clicky, an AI companion that provides push-to-talk voice help, screen-aware responses, image gallery views, local agent work, and a cursor overlay for pointing at UI elements.
+Percy is an enhanced version of OpenClicky, a native macOS menu-bar companion originally by Jason Kneen. This version includes AI-powered text explanation capabilities that allow users to select any text in any application and get intelligent, context-aware explanations instantly.
+
+Percy maintains all the original OpenClicky functionality while adding powerful new text analysis features.
+
+## What's New in Percy
+
+### Text Explanation Feature
+- **System-wide text selection capture**: Works across all macOS applications (Chrome, Safari, TextEdit, etc.)
+- **Context-aware AI explanations**: Uses Claude to understand text within its broader context
+- **Keyboard shortcut**: Activate with `Cmd+Shift+E`
+- **Smart overlay UI**: Beautiful explanation bubble with expandable details
+- **Follow-up questions**: Ask additional questions about the same selection
+- **Copy functionality**: Easily copy explanations to clipboard
+
+## Original OpenClicky Features
 
 OpenClicky uses local configuration only. There is no Google login requirement and no hosted key-sync flow.
 
@@ -100,6 +114,25 @@ In Xcode:
 5. Grant Accessibility, Microphone, and Screen Recording permissions when macOS asks.
 
 Do not use terminal `xcodebuild` for permission testing. macOS TCC permissions are tied to the signed app identity and install path, and throwaway command-line builds can cause permission loops.
+
+## Using the Text Explanation Feature
+
+### Basic Usage
+1. Select any text in any application (Chrome, Safari, TextEdit, etc.)
+2. Press `Cmd+Shift+E` to trigger the explanation
+3. View the AI-generated explanation in the overlay bubble
+4. Click "More" to expand key points and suggested questions
+5. Click any suggested question to get a follow-up explanation
+6. Click "Copy" to copy the explanation to clipboard
+7. Click the X to dismiss the overlay
+
+### Example Scenarios
+- **In Chrome**: Select a technical term → Get a simple explanation
+- **In TextEdit**: Select a sentence you wrote → Get writing suggestions
+- **In Safari**: Select news text → Get unbiased summary
+- **In any app**: Select complex text → Get plain English explanation
+
+For detailed documentation, see [TEXT_EXPLANATION_FEATURE.md](TEXT_EXPLANATION_FEATURE.md)
 
 ## Development Verification
 
