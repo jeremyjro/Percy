@@ -1687,7 +1687,7 @@ final class CompanionManager: ObservableObject {
     private func showNoSelectionAlert() {
         // Show a temporary caption on the cursor
         cursorOverlayState.externalPrimaryCaptionText = "No text selected"
-        cursorOverlayState.externalPrimaryCaptionAccentHex = ClickyAccentTheme.red.hex
+        cursorOverlayState.externalPrimaryCaptionAccentHex = "#E11D48" // rose color
         
         // Clear after delay
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
@@ -1698,7 +1698,7 @@ final class CompanionManager: ObservableObject {
     
     private func showPermissionDeniedAlert() {
         cursorOverlayState.externalPrimaryCaptionText = "Accessibility permission needed"
-        cursorOverlayState.externalPrimaryCaptionAccentHex = ClickyAccentTheme.red.hex
+        cursorOverlayState.externalPrimaryCaptionAccentHex = "#E11D48" // rose color
         
         DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
             self?.cursorOverlayState.externalPrimaryCaptionText = nil
@@ -1708,7 +1708,7 @@ final class CompanionManager: ObservableObject {
     
     private func showApplicationNotSupportedAlert(_ appName: String) {
         cursorOverlayState.externalPrimaryCaptionText = "\(appName) not supported"
-        cursorOverlayState.externalPrimaryCaptionAccentHex = ClickyAccentTheme.orange.hex
+        cursorOverlayState.externalPrimaryCaptionAccentHex = "#EA580C" // orange color
         
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
             self?.cursorOverlayState.externalPrimaryCaptionText = nil
@@ -1718,7 +1718,7 @@ final class CompanionManager: ObservableObject {
     
     private func showErrorAlert(_ error: String) {
         cursorOverlayState.externalPrimaryCaptionText = "Error: \(error)"
-        cursorOverlayState.externalPrimaryCaptionAccentHex = ClickyAccentTheme.red.hex
+        cursorOverlayState.externalPrimaryCaptionAccentHex = "#E11D48" // rose color
         
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
             self?.cursorOverlayState.externalPrimaryCaptionText = nil
@@ -1728,7 +1728,7 @@ final class CompanionManager: ObservableObject {
     
     private func showExplanationErrorAlert(_ error: String) {
         cursorOverlayState.externalPrimaryCaptionText = "Explanation failed: \(error)"
-        cursorOverlayState.externalPrimaryCaptionAccentHex = ClickyAccentTheme.red.hex
+        cursorOverlayState.externalPrimaryCaptionAccentHex = "#E11D48" // rose color
         
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
             self?.cursorOverlayState.externalPrimaryCaptionText = nil
