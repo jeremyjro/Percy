@@ -9,6 +9,7 @@
 
 import AppKit
 import Foundation
+import Combine
 
 /// Information about a text selection captured from any application
 struct TextSelectionInfo: Sendable {

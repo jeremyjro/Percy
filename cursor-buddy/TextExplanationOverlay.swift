@@ -9,6 +9,7 @@
 
 import SwiftUI
 import AppKit
+import Combine
 
 /// Configuration for the explanation overlay appearance
 struct TextExplanationOverlayConfiguration {
@@ -222,8 +223,12 @@ final class TextExplanationOverlayManager: ObservableObject {
     var onDismiss: (() -> Void)?
     var onCopy: (() -> Void)?
     
-    init(configuration: TextExplanationOverlayConfiguration = .default) {
+    init(configuration: TextExplanationOverlayConfiguration) {
         self.configuration = configuration
+    }
+    
+    convenience init() {
+        self.init(configuration: .default)
     }
     
     /// Shows an explanation overlay at the specified position
@@ -262,10 +267,12 @@ final class TextExplanationOverlayManager: ObservableObject {
         NSAnimationContext.runAnimationGroup { context in
             context.duration = configuration.animationDuration
             overlayWindow?.animator().alphaValue = 0
-        } completionHandler: {
-            self.overlayWindow?.orderOut(nil)
-            self.isVisible = false
-            self.currentExplanation = nil
+        } completionHandler: { [weak self] in
+            MainActor.assumeIsolated {
+                self?.overlayWindow?.orderOut(nil)
+                self?.isVisible = false
+                self?.currentExplanation = nil
+            }
         }
     }
     
@@ -349,7 +356,9 @@ final class TextExplanationOverlayManager: ObservableObject {
     }
     
     deinit {
-        overlayWindow?.close()
+        MainActor.assumeIsolated {
+            overlayWindow?.close()
+        }
     }
 }
 

@@ -8,6 +8,7 @@
 //
 
 import Foundation
+import Combine
 
 /// Result of a text explanation request
 struct TextExplanationResult: Sendable {
