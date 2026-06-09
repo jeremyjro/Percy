@@ -534,6 +534,7 @@ final class CompanionManager: ObservableObject {
     let wakeWordManager = OpenClickyWakeWordManager()
     private let wakeWordAudioDucker = OpenClickyWakeWordAudioDucker()
     let globalPushToTalkShortcutMonitor = GlobalPushToTalkShortcutMonitor()
+    let textExplanationShortcutMonitor = TextExplanationShortcutMonitor()
     let overlayWindowManager = OverlayWindowManager()
     let notchCaptureWindowManager = OpenClickyNotchCaptureWindowManager()
     let agentDockWindowManager = ClickyAgentDockWindowManager()
@@ -546,6 +547,12 @@ final class CompanionManager: ObservableObject {
     let codexHomeManager = CodexHomeManager()
     let nativeComputerUseController = OpenClickyNativeComputerUseController()
     let backgroundComputerUseController = OpenClickyBackgroundComputerUseController()
+    
+    // Text Explanation Feature
+    private let textSelectionMonitor = TextSelectionMonitor()
+    private lazy var textExplanationService = TextExplanationService(claudeAPI: claudeAPI)
+    private let textExplanationOverlayManager = TextExplanationOverlayManager()
+    @Published private(set) var isTextExplanationActive = false
     @Published private(set) var codexAgentSessions: [CodexAgentSession]
     @Published private(set) var activeCodexAgentSessionID: UUID
     /// Session IDs the user has archived from the chat sidebar. Persisted to UserDefaults.
@@ -1391,6 +1398,7 @@ final class CompanionManager: ObservableObject {
     private var autoResumedRelaunchSessionIDs: Set<UUID> = []
     private var tutorIdleCancellable: AnyCancellable?
     private var accessibilityCheckTimer: Timer?
+    private var cancellables = Set<AnyCancellable>()
     private var pendingKeyboardShortcutStartTask: Task<Void, Never>?
     private var pendingAgentDockItemRemovalTasks: [UUID: DispatchWorkItem] = [:]
 
@@ -1539,6 +1547,10 @@ final class CompanionManager: ObservableObject {
         wakeWordManager.onWakeWordDetected = { [weak self] transcript in
             self?.handleWakeWordDetected(transcript)
         }
+        
+        // Setup text explanation feature
+        setupTextExplanationFeature()
+        
         // Bind the automation scheduler so cron / interval prompts can fire
         // through this CompanionManager while the app is running.
         OpenClickyAutomationStore.shared.bind(companion: self)
@@ -1549,6 +1561,180 @@ final class CompanionManager: ObservableObject {
     /// Whether the blue cursor overlay is currently visible on screen.
     /// Used by the panel to show accurate status text ("Active" vs "Ready").
     @Published private(set) var isOverlayVisible: Bool = false
+    
+    // MARK: - Text Explanation Feature Setup
+    
+    private func setupTextExplanationFeature() {
+        // Start the shortcut monitor
+        textExplanationShortcutMonitor.start()
+        
+        // Subscribe to shortcut triggers
+        textExplanationShortcutMonitor.shortcutTriggeredPublisher
+            .sink { [weak self] in
+                self?.handleTextExplanationShortcutTriggered()
+            }
+            .store(in: &cancellables)
+        
+        // Setup overlay manager callbacks
+        textExplanationOverlayManager.onAskQuestion = { [weak self] question in
+            self?.handleTextExplanationFollowUpQuestion(question)
+        }
+        
+        textExplanationOverlayManager.onDismiss = { [weak self] in
+            self?.isTextExplanationActive = false
+        }
+        
+        print("✅ CompanionManager: Text explanation feature initialized")
+    }
+    
+    private func handleTextExplanationShortcutTriggered() {
+        guard !isTextExplanationActive else {
+            print("⚠️ Text explanation already active, ignoring shortcut")
+            return
+        }
+        
+        Task { @MainActor in
+            isTextExplanationActive = true
+            
+            // Capture selected text
+            let captureResult = textSelectionMonitor.captureSelectedText()
+            
+            switch captureResult {
+            case .success(let selectionInfo):
+                print("✅ Text captured: \(selectionInfo.selectedText.prefix(50))...")
+                await generateAndShowExplanation(for: selectionInfo)
+                
+            case .noSelection:
+                print("⚠️ No text selected")
+                showNoSelectionAlert()
+                isTextExplanationActive = false
+                
+            case .permissionDenied:
+                print("⚠️ Accessibility permission denied")
+                showPermissionDeniedAlert()
+                isTextExplanationActive = false
+                
+            case .applicationNotSupported(let appName):
+                print("⚠️ Application not supported: \(appName)")
+                showApplicationNotSupportedAlert(appName)
+                isTextExplanationActive = false
+                
+            case .error(let error):
+                print("⚠️ Text capture error: \(error)")
+                showErrorAlert(error)
+                isTextExplanationActive = false
+            }
+        }
+    }
+    
+    private func generateAndShowExplanation(for selectionInfo: TextSelectionInfo) async {
+        do {
+            let explanation = try await textExplanationService.explainText(
+                selectedText: selectionInfo.selectedText,
+                context: selectionInfo.surroundingContext,
+                applicationName: selectionInfo.applicationName
+            )
+            
+            // Position the overlay near the selection
+            let overlayPosition = calculateOverlayPosition(for: selectionInfo.selectionLocation)
+            
+            // Show the explanation overlay
+            textExplanationOverlayManager.showExplanation(explanation, at: overlayPosition)
+            
+        } catch {
+            print("⚠️ Failed to generate explanation: \(error)")
+            showExplanationErrorAlert(error.localizedDescription)
+            isTextExplanationActive = false
+        }
+    }
+    
+    private func handleTextExplanationFollowUpQuestion(_ question: String) {
+        Task { @MainActor in
+            guard let lastSelection = textSelectionMonitor.lastCapturedSelection else {
+                print("⚠️ No previous selection to follow up on")
+                return
+            }
+            
+            do {
+                let followUpExplanation = try await textExplanationService.explainText(
+                    selectedText: lastSelection.selectedText,
+                    context: lastSelection.surroundingContext,
+                    applicationName: lastSelection.applicationName,
+                    followUpQuestion: question
+                )
+                
+                // Update the overlay with the new explanation
+                let overlayPosition = calculateOverlayPosition(for: lastSelection.selectionLocation)
+                textExplanationOverlayManager.showExplanation(followUpExplanation, at: overlayPosition)
+                
+            } catch {
+                print("⚠️ Failed to generate follow-up explanation: \(error)")
+            }
+        }
+    }
+    
+    private func calculateOverlayPosition(for selectionLocation: CGPoint) -> CGPoint {
+        // Position the overlay slightly above and to the right of the cursor
+        let offsetX: CGFloat = 20
+        let offsetY: CGFloat = 80
+        
+        return CGPoint(
+            x: selectionLocation.x + offsetX,
+            y: selectionLocation.y + offsetY
+        )
+    }
+    
+    private func showNoSelectionAlert() {
+        // Show a temporary caption on the cursor
+        cursorOverlayState.externalPrimaryCaptionText = "No text selected"
+        cursorOverlayState.externalPrimaryCaptionAccentHex = ClickyAccentTheme.red.hex
+        
+        // Clear after delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+            self?.cursorOverlayState.externalPrimaryCaptionText = nil
+            self?.cursorOverlayState.externalPrimaryCaptionAccentHex = nil
+        }
+    }
+    
+    private func showPermissionDeniedAlert() {
+        cursorOverlayState.externalPrimaryCaptionText = "Accessibility permission needed"
+        cursorOverlayState.externalPrimaryCaptionAccentHex = ClickyAccentTheme.red.hex
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
+            self?.cursorOverlayState.externalPrimaryCaptionText = nil
+            self?.cursorOverlayState.externalPrimaryCaptionAccentHex = nil
+        }
+    }
+    
+    private func showApplicationNotSupportedAlert(_ appName: String) {
+        cursorOverlayState.externalPrimaryCaptionText = "\(appName) not supported"
+        cursorOverlayState.externalPrimaryCaptionAccentHex = ClickyAccentTheme.orange.hex
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+            self?.cursorOverlayState.externalPrimaryCaptionText = nil
+            self?.cursorOverlayState.externalPrimaryCaptionAccentHex = nil
+        }
+    }
+    
+    private func showErrorAlert(_ error: String) {
+        cursorOverlayState.externalPrimaryCaptionText = "Error: \(error)"
+        cursorOverlayState.externalPrimaryCaptionAccentHex = ClickyAccentTheme.red.hex
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+            self?.cursorOverlayState.externalPrimaryCaptionText = nil
+            self?.cursorOverlayState.externalPrimaryCaptionAccentHex = nil
+        }
+    }
+    
+    private func showExplanationErrorAlert(_ error: String) {
+        cursorOverlayState.externalPrimaryCaptionText = "Explanation failed: \(error)"
+        cursorOverlayState.externalPrimaryCaptionAccentHex = ClickyAccentTheme.red.hex
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+            self?.cursorOverlayState.externalPrimaryCaptionText = nil
+            self?.cursorOverlayState.externalPrimaryCaptionAccentHex = nil
+        }
+    }
 
     /// The model used for voice responses. Persisted to UserDefaults.
     @Published var selectedModel: String = CompanionManager.initialVoiceResponseModelID()
