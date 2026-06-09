@@ -51,7 +51,7 @@ typealias OpenClickyExternalControlHandler = @MainActor (OpenClickyExternalContr
 final class OpenClickyExternalControlBridgeServer: @unchecked Sendable {
     private let port: UInt16
     private let handler: OpenClickyExternalControlHandler
-    private let queue = DispatchQueue(label: "com.jkneen.openclicky.external-control-bridge")
+    private let queue = DispatchQueue(label: "com.jeremyjro.percy.external-control-bridge")
     private var listener: NWListener?
     private var sseConnections: [UUID: NWConnection] = [:]
     private let proxySession: URLSession

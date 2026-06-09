@@ -61,7 +61,7 @@ nonisolated enum AppBundleConfiguration {
     static let userGlassOpacityDefaultsKey = "openClickyGlassOpacity"
     static let userGlassFrostingDefaultsKey = "openClickyGlassFrosting"
     static let userThemeDefaultsKey = "openClickyThemeAppearance"
-    static let appGroupIdentifier = "group.com.jkneen.openclicky"
+    static let appGroupIdentifier = "group.com.jeremyjro.percy"
 
     static func anthropicAPIKey() -> String? {
         let configuredAnthropicAPIKey = userDefaultsValue(forKey: userAnthropicAPIKeyDefaultsKey) ?? stringValue(
@@ -339,7 +339,7 @@ nonisolated enum AppBundleConfiguration {
         return nil
     }
 
-    private static let keychainService = "com.jkneen.openclicky.secrets"
+    private static let keychainService = "com.jeremyjro.percy.secrets"
 
     private static let keychainBackedDefaultsKeys: Set<String> = [
         userAnthropicAPIKeyDefaultsKey,

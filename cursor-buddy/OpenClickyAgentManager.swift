@@ -35,7 +35,7 @@ struct AgentConfig: Codable, Equatable {
 final class OpenClickyAgentManager: ObservableObject {
     static let shared = OpenClickyAgentManager()
 
-    private let logger = Logger(subsystem: "com.jkneen.openclicky", category: "AgentRuntime")
+    private let logger = Logger(subsystem: "com.jeremyjro.percy", category: "AgentRuntime")
     nonisolated private static let streamReadIdleTimeout: TimeInterval = 90
     nonisolated private static let firstTokenTimeout: TimeInterval = 20
 
@@ -55,7 +55,7 @@ final class OpenClickyAgentManager: ObservableObject {
     var launchAgentPlistPath: URL {
         let launchAgents = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/LaunchAgents", isDirectory: true)
-        return launchAgents.appendingPathComponent("com.jkneen.openclicky.agent.plist")
+        return launchAgents.appendingPathComponent("com.jeremyjro.percy.agent.plist")
     }
 
     var configPath: URL {
@@ -140,10 +140,10 @@ final class OpenClickyAgentManager: ObservableObject {
     /// detached ensureRunning/restartService paths. Lives off the main actor so
     /// the launchctl `waitUntilExit()` and file writes never block the UI.
     nonisolated static func performInstall(binaryPath: String, plistPath: String, supportDir: URL) throws {
-        let installLog = Logger(subsystem: "com.jkneen.openclicky", category: "AgentRuntime")
+        let installLog = Logger(subsystem: "com.jeremyjro.percy", category: "AgentRuntime")
         installLog.info("performInstall: writing plist to \(plistPath, privacy: .public)")
         let plist: [String: Any] = [
-            "Label": "com.jkneen.openclicky.agent",
+            "Label": "com.jeremyjro.percy.agent",
             "ProgramArguments": [binaryPath, "run"],
             "RunAtLoad": true,
             "KeepAlive": true,
@@ -209,7 +209,7 @@ final class OpenClickyAgentManager: ObservableObject {
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/launchctl")
-        process.arguments = ["list", "com.jkneen.openclicky.agent"]
+        process.arguments = ["list", "com.jeremyjro.percy.agent"]
 
         let pipe = Pipe()
         process.standardOutput = pipe
@@ -615,8 +615,8 @@ final class OpenClickyAgentManager: ObservableObject {
 
             if plistExists {
                 report("Kickstarting openclicky-agent via launchctl")
-                let kickstart = (try? Self.runLaunchctlStatic(["kickstart", "-k", "gui/\(getuid())/com.jkneen.openclicky.agent"])) ?? -1
-                let startCmd = (try? Self.runLaunchctlStatic(["start", "com.jkneen.openclicky.agent"])) ?? -1
+                let kickstart = (try? Self.runLaunchctlStatic(["kickstart", "-k", "gui/\(getuid())/com.jeremyjro.percy.agent"])) ?? -1
+                let startCmd = (try? Self.runLaunchctlStatic(["start", "com.jeremyjro.percy.agent"])) ?? -1
                 log.info("ensureRunning.work: launchctl kickstart=\(kickstart, privacy: .public) start=\(startCmd, privacy: .public)")
                 if Self.waitForRunningSocketStatic(path: socketPath, timeout: 2.0) {
                     log.info("ensureRunning.work: socket live after kickstart")
@@ -666,7 +666,7 @@ final class OpenClickyAgentManager: ObservableObject {
         let socketPath = ipcSocketPath
 
         let result: ServiceStatus = await Task.detached(priority: .userInitiated) {
-            _ = try? Self.runLaunchctlStatic(["bootout", "gui/\(getuid())/com.jkneen.openclicky.agent"])
+            _ = try? Self.runLaunchctlStatic(["bootout", "gui/\(getuid())/com.jeremyjro.percy.agent"])
             _ = try? Self.runLaunchctlStatic(["unload", plistPath])
             Self.terminateAgentProcesses(modes: ["run"])
             try? FileManager.default.removeItem(atPath: socketPath)
@@ -674,7 +674,7 @@ final class OpenClickyAgentManager: ObservableObject {
             do {
                 if FileManager.default.fileExists(atPath: plistPath) {
                     _ = try? Self.runLaunchctlStatic(["bootstrap", "gui/\(getuid())", plistPath])
-                    _ = try? Self.runLaunchctlStatic(["kickstart", "-k", "gui/\(getuid())/com.jkneen.openclicky.agent"])
+                    _ = try? Self.runLaunchctlStatic(["kickstart", "-k", "gui/\(getuid())/com.jeremyjro.percy.agent"])
                 } else {
                     try Self.performInstall(binaryPath: binaryPath, plistPath: plistPath, supportDir: supportDir)
                 }
@@ -700,7 +700,7 @@ final class OpenClickyAgentManager: ObservableObject {
         let socketPath = ipcSocketPath
 
         await Task.detached(priority: .userInitiated) {
-            _ = try? Self.runLaunchctlStatic(["bootout", "gui/\(getuid())/com.jkneen.openclicky.agent"])
+            _ = try? Self.runLaunchctlStatic(["bootout", "gui/\(getuid())/com.jeremyjro.percy.agent"])
             _ = try? Self.runLaunchctlStatic(["unload", plistPath])
             Self.terminateAgentProcesses(modes: ["run"])
             try? FileManager.default.removeItem(atPath: socketPath)
