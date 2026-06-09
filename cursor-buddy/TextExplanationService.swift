@@ -57,12 +57,8 @@ final class TextExplanationService: ObservableObject {
         
         currentExplanationProgress = 0.3
         
-        // Call Claude API
-        let response = try await claudeAPI.sendMessage(
-            prompt: prompt,
-            model: "claude-sonnet-4-6",
-            maxTokens: 1000
-        )
+        // Call Claude API directly
+        let response = try await callClaudeAPI(prompt: prompt)
         
         currentExplanationProgress = 0.7
         
@@ -74,6 +70,43 @@ final class TextExplanationService: ObservableObject {
         
         lastExplanation = explanation
         return explanation
+    }
+    
+    /// Makes a direct API call to Claude
+    private func callClaudeAPI(prompt: String) async throws -> String {
+        let apiKey = claudeAPI.apiKey ?? ""
+        let apiURL = URL(string: "https://api.anthropic.com/v1/messages")!
+        
+        var request = URLRequest(url: apiURL)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 30
+        request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
+        request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        let body: [String: Any] = [
+            "model": "claude-sonnet-4-6",
+            "max_tokens": 1000,
+            "messages": [
+                [
+                    "role": "user",
+                    "content": prompt
+                ]
+            ]
+        ]
+        
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        
+        let (data, _) = try await URLSession.shared.data(for: request)
+        
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let content = json["content"] as? [[String: Any]],
+              let firstContent = content.first,
+              let text = firstContent["text"] as? String else {
+            throw NSError(domain: "TextExplanationService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid API response"])
+        }
+        
+        return text
     }
     
     /// Builds the explanation prompt for Claude
